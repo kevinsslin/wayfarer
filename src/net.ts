@@ -1,40 +1,21 @@
 /**
  * Network adapters for the resolver. Kept out of `core` because they touch
- * Obsidian's requestUrl and, on desktop, Node's https module.
+ * Obsidian's requestUrl.
  */
-import { Platform, requestUrl } from "obsidian";
+import { requestUrl } from "obsidian";
+import { mapsUrlFromHtml } from "./core/gmaps-url";
 import type { ResolveDeps, ResolvedPlace } from "./core/resolve";
 
 const UA = "ObsidianWayfarer/0.1 (+https://github.com/kevinsslin/wayfarer)";
 
-/**
- * maps.app.goo.gl answers a browser User-Agent with a 200 interstitial page
- * and only hands the Location header to non-browser clients, and Obsidian's
- * requestUrl follows redirects silently, so on desktop we use Node's https
- * with our own UA and walk the redirects ourselves.
+/** Obsidian follows redirects on every platform; recover the destination URL
+ * from Google's response without importing Node or Electron into the plugin.
  */
-export async function expandShortUrl(url: string, maxHops = 5): Promise<string> {
-  if (!Platform.isDesktop) throw new Error("Short link expansion needs the desktop app");
-  // Node is only reachable through the renderer's require; the guard above keeps this off mobile.
-  const https = (window as unknown as { require: (id: string) => typeof import("node:https") }).require("node:https");
-  let current = url;
-  for (let i = 0; i < maxHops; i++) {
-    const location = await new Promise<string | null>((resolve, reject) => {
-      const req = https.request(current, { method: "GET", headers: { "User-Agent": UA, Accept: "*/*" } }, (res) => {
-        res.resume();
-        const loc = res.headers.location;
-        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && loc) resolve(new URL(loc, current).href);
-        else resolve(null);
-      });
-      req.setTimeout(8000, () => req.destroy(new Error("Timed out expanding short link")));
-      req.on("error", reject);
-      req.end();
-    });
-    if (!location) return current;
-    current = location;
-    if (!/goo\.gl|g\.co/.test(new URL(current).hostname)) return current;
-  }
-  return current;
+export async function expandShortUrl(url: string): Promise<string> {
+  const response = await requestUrl({ url, headers: { "User-Agent": UA, Accept: "text/html" }, throw: false });
+  const expanded = response.status === 200 ? mapsUrlFromHtml(response.text) : null;
+  if (!expanded) throw new Error("Could not expand this short link. Paste the full Google Maps place link instead.");
+  return expanded;
 }
 
 const PLACE_FIELDS = "id,displayName,location,formattedAddress,rating,regularOpeningHours,websiteUri,primaryType,photos,utcOffsetMinutes";

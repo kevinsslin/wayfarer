@@ -23,7 +23,7 @@ Do not stall on missing answers. Plan on stated assumptions and put each one in 
 
 For every candidate place:
 
-- **Coordinates.** From the place's Google Maps page (the `!3d…!4d…` pair in the URL, or the pin), 4 to 6 decimals. When you have the original Google Maps place URL, keep it in the note for the user to convert with **Convert every map link in this note** on desktop. Conversion keeps the original clickable place URL and saves coordinates separately. Use a `geo:` link when you have verified coordinates but no original place URL. Never guess numbers; never write a search URL (`?q=name`), it has no pin.
+- **Coordinates.** From the place's Google Maps page (the `!3d…!4d…` pair in the URL, or the pin), 4 to 6 decimals. When you have the original Google Maps place URL, keep it in the note for the user to convert with **Convert every map link in this note** in Obsidian. Conversion keeps the original clickable place URL and saves coordinates separately. Use a `geo:` link when you have verified coordinates but no original place URL. Never guess numbers; never write a search URL (`?q=name`), it has no pin.
 - **Opening days and hours, last entry, seasonal closure.** The single most common planning error is a museum, temple hall, shop or restaurant closed on the planned weekday. Check the weekday of every visit.
 - **Getting there and back.** Which bus or train, how often it runs, first and last departures that matter (last bus down the mountain, last ferry), whether a pass covers it, how long it takes.
 - **Time needed on site**, and the cost of tickets.
@@ -75,7 +75,7 @@ Write in the user's language. Keep sentences short and concrete; the user reads 
 
 ## 5. Hand back
 
-Keep the handback brief. Open the note with the Wayfarer map beside it; on desktop run **Convert every map link in this note** for any URLs you left. With a Google API key, **Fetch Google details for stops without them** adds hours and photos. Choose transport on the desktop timeline arrows or via **Change transport** in a stop’s details on mobile. Start with the to-do list, unbooked nights first. Point out red legs (two written times too close for the leg between them), "closed that day" chips, and what you could not confirm.
+Keep the handback brief. Open the note with the Wayfarer map beside it; run **Convert every map link in this note** for any URLs you left. With a Google API key, **Fetch Google details for stops without them** adds hours and photos. Choose transport on the desktop timeline arrows or via **Change transport** in a stop’s details on mobile. Start with the to-do list, unbooked nights first. Point out red legs (two written times too close for the leg between them), "closed that day" chips, and what you could not confirm.
 
 ## Rules
 

@@ -18,7 +18,7 @@ Saved place details and routed legs travel with the note as hidden metadata. Syn
 
 ## What it does
 
-- **Stops are links.** Paste a full Google Maps place link to turn it into a stop. The note keeps the original clickable Google Maps link, with coordinates saved as hidden metadata, so clicking the name opens the original place. `[Name](geo:lat,lng)`, the inline format the [Map View](https://github.com/esm7/obsidian-map-view) plugin reads, is also supported. Short `maps.app.goo.gl` links can be expanded on desktop.
+- **Stops are links.** Paste a full Google Maps place link to turn it into a stop. The note keeps the original clickable Google Maps link, with coordinates saved as hidden metadata, so clicking the name opens the original place. `[Name](geo:lat,lng)`, the inline format the [Map View](https://github.com/esm7/obsidian-map-view) plugin reads, is also supported. Short `maps.app.goo.gl` links can be expanded on desktop and mobile. If Google prevents automatic expansion, paste the full place link.
 - **Headings are days.** `## 2026-09-17 Thu Up to Senjogahara` starts a day. A range like `## 2026-09-19 ~ 2026-09-26 Tokyo` keeps a stretch you have not planned yet as one block. Undated sections (research, to-dos, candidates) stay in the same note and off the map.
 - **The map follows the note.** Put the cursor on a stop and the map flies there. Pins are coloured and numbered per day, with a line between consecutive stops.
 - **A timeline beside the map.** The day's stops top to bottom with photo, time, name and your remark, and the leg between each pair. Click a card to fly there; drag a card to reorder the note.
@@ -94,7 +94,7 @@ The skill instructions and this README are written in English. Language support 
 
 ## Google API key
 
-Optional. Without a key you get pins from the link's coordinates and straight-line distances. With a key you also get place details, photos and routed legs. The key is yours, stored in this vault's `.obsidian/plugins/wayfarer/data.json` and never written into a note. Requests go only to Google's Places and Routes endpoints; map tiles come from OpenStreetMap unless you set another tile URL.
+Optional. Without a key you get pins from the link's coordinates and straight-line distances. With a key you also get place details, photos and routed legs. The key is yours, stored in this vault's `.obsidian/plugins/wayfarer/data.json` and never written into a note. Place details, photos and routes use Google's Places and Routes endpoints; expanding a short link downloads its Google Maps page. The plugin does not execute scripts from that page. Map tiles come from OpenStreetMap unless you set another tile URL.
 
 1. In [Google Cloud Console](https://console.cloud.google.com/) create a project and enable billing (Google requires a card even for the free tier; set a budget alert).
 2. Enable **Places API (New)** and **Routes API**.
@@ -109,7 +109,7 @@ In Obsidian, open **Settings → Community plugins → Browse**, search for **Wa
 
 For manual installation, download `main.js`, `manifest.json` and `styles.css` from the [latest release](https://github.com/kevinsslin/wayfarer/releases/latest) into `<vault>/.obsidian/plugins/wayfarer/` and enable it under **Settings → Community plugins**. [BRAT](https://github.com/TfTHacker/obsidian42-brat) with `kevinsslin/wayfarer` also works.
 
-Works on desktop and mobile. On a phone the map opens as its own tab and the timeline folds away until you tap for it. The one desktop-only feature is expanding `maps.app.goo.gl` short links, which needs Node's https; on a phone, paste the full link or let the conversion happen on the computer. Saved stops, routes and details can be read on desktop and mobile. The last browsed stop is cached locally per note and device; it is not synced as travel progress.
+Works on desktop and mobile. On a phone the map opens as its own tab and the timeline folds away until you tap for it. Short links use Obsidian’s network API on both platforms; if Google blocks expansion, paste the full place URL. Saved stops, routes and details can be read on desktop and mobile. The last browsed stop is cached locally per note and device; it is not synced as travel progress.
 
 ## Commands
 

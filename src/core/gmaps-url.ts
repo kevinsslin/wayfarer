@@ -117,3 +117,27 @@ function tryUrl(text: string): URL | null {
     return null;
   }
 }
+
+
+/** Recover a Maps destination after requestUrl follows a short link's redirect.
+ * Only read URLs from the response; never execute Google's page scripts or use
+ * the map's viewport as an invented place pin.
+ */
+export function mapsUrlFromHtml(html: string): string | null {
+  const decoded = html.replace(/\\u([0-9a-f]{4})/gi, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)))
+    .replace(/\\\//g, "/").replace(/&amp;/g, "&").replace(/&quot;|&#34;/g, '"').replace(/&#39;/g, "'");
+  const urls = decoded.match(/https?:\/\/(?:[a-z0-9-]+\.)*google\.[a-z.]+\/maps\/(?:place|search|dir)\/[^\s"'<>\\]+/gi) ?? [];
+  let best: { url: string; score: number } | null = null;
+  for (const raw of urls) {
+    const variants = [raw];
+    try { variants.push(decodeURIComponent(raw)); } catch { /* Keep an otherwise usable URL. */ }
+    for (const candidate of variants) {
+      let parsed: ParsedMapsUrl | null;
+      try { parsed = parseGoogleMapsUrl(candidate); } catch { continue; }
+      if (!parsed || parsed.isShort) continue;
+      const score = parsed.exact && parsed.lat !== undefined ? 4 : parsed.placeId ? 3 : parsed.name && parsed.lat !== undefined ? 2 : parsed.name ? 1 : 0;
+      if (score && (!best || score > best.score)) best = { url: candidate, score };
+    }
+  }
+  return best?.url ?? null;
+}

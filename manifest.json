@@ -1,7 +1,7 @@
 {
 	"id": "wayfarer",
 	"name": "Wayfarer",
-	"version": "0.1.11",
+	"version": "0.1.12",
 	"minAppVersion": "1.11.4",
 	"description": "Trip planning beside a map: paste Google Maps links, headings become days, the map follows your cursor.",
 	"author": "Kevin Lin",

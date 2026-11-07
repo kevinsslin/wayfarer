@@ -63,3 +63,28 @@ describe("parseGoogleMapsUrl", () => {
     expect(parseGoogleMapsUrl("not a url at all !!")).toBeNull();
   });
 });
+
+
+import { mapsUrlFromHtml } from "./gmaps-url";
+
+describe("short-link response URLs", () => {
+  it("reads a canonical place URL without executing page code", () => {
+    const url = "https://www.google.com/maps/place/Cafe/@35,139,17z/data=!3d35!4d139";
+    expect(mapsUrlFromHtml(`<link rel="canonical" href="${url}"><script>throw new Error('never execute')</script>`)).toBe(url);
+  });
+  it("reads Google's escaped continuation URL after redirects", () => {
+    const html = String.raw`<script>var data="https:\/\/accounts.google.com/Login?continue=https://www.google.com/maps/search/5.811698,%2B-55.118891%3Fentry%3Dtts\u0026amp;service\u003dlocal"</script>`;
+    const result = parseGoogleMapsUrl(mapsUrlFromHtml(html)!);
+    expect(result).toMatchObject({ lat: 5.811698, lng: -55.118891, exact: true });
+  });
+  it("ignores external destinations, static map images and pages without a place", () => {
+    expect(mapsUrlFromHtml('<a href="https://example.com/maps/place/Fake/@1,2">x</a>')).toBeNull();
+    expect(mapsUrlFromHtml('<img src="https://maps.google.com/maps/api/staticmap?center=1,2">')).toBeNull();
+    expect(mapsUrlFromHtml("Google requires consent")).toBeNull();
+  });
+  it("prefers the exact place pin over a viewport-only URL", () => {
+    const exact = "https://www.google.com/maps/place/Cafe/data=!3d35!4d139";
+    const html = `"https://www.google.com/maps/place/Cafe/@30,130,10z" "${exact}"`;
+    expect(mapsUrlFromHtml(html)).toBe(exact);
+  });
+});

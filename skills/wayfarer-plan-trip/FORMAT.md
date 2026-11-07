@@ -57,4 +57,4 @@ Not planned day by day yet. Staying in the city over the long weekend.
 | Rest of the line | Shown as the remark in the stop's card. |
 | `![[img.jpg]]` or image URL on the line or the next | Photo in the card. |
 | `%%wf:{…}%%` after a link | Plugin metadata: Google details (rating, hours, address, photo, UTC offset) and the last routed leg. Includes coordinates for imported Google Maps links. Written by the plugin, never by hand. Leave it as is. |
-| Full Google Maps URL | Converted to a stop when pasted or via the convert command; the original URL stays clickable. Short `maps.app.goo.gl` links only on desktop. |
+| Full Google Maps URL | Converted to a stop when pasted or via the convert command; the original URL stays clickable. Short `maps.app.goo.gl` links can be expanded on desktop and mobile; use the full place URL when expansion is unavailable. |

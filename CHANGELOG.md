@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.12] - 2026-11-07
+
+- Imported Google Maps stops keep their original clickable business URL, with validated coordinates saved separately. Reading view, map cards and KML use the original URL or a saved Place ID. Editing a URL invalidates its old pin until reconverted. The planning skill preserves source links as well.
+- Short links expand through Obsidian's network API on desktop and mobile, with no Node or Electron runtime dependency. If Google blocks expansion, the original link stays intact and the plugin asks for the full place URL.
+- In-flight place details and link conversions cannot write into another note after a same-pane file switch. Late writes and queued work are discarded after unload.
+- Saved routes validate both endpoints, transport and transit departure context. Google route requests share a three-request limit and pause after refusals.
+- Chinese opening-hours checks accept prefix day periods and additional range separators.
+- View references follow Obsidian workspace ownership, pending editor debounce is canceled on unload, and map chrome and interactions use the view's own document and window.
+- Updated test tooling and patched vulnerable development dependencies.
+
+Compatibility: existing `geo:` notes remain readable. Newly imported Google Maps stops require 0.1.12 or newer on each device for map display. Older route metadata shows straight-line distance until refreshed with a Google API key; coordinate-only legacy stops cannot automatically recover a lost business URL.
+
 ## [0.1.5] - 2026-09-14
 
 - Clean CSS lint (stylelint with Obsidian's config, now part of `pnpm check`). The flagged lines were Leaflet's vendored stylesheet: its duplicate prefixed properties, `!important` tile rules, `text-indent` hack and IE-only rules are gone, with the tile and attribution rules scoped to the plugin's pane instead. The route arrowhead is a CSS border triangle rather than a `clip-path`, and the stop popup pins its width through Leaflet's options rather than an override. Tiles force `border-radius: 0` so themes that round every image no longer leave gaps between tiles. Release assets are now attested with GitHub artifact attestations (`gh attestation verify main.js --repo kevinsslin/wayfarer`). The settings tab declares its settings through `getSettingDefinitions()` so they appear in the settings search on Obsidian 1.13+, while still rendering the classic tab on 1.11.

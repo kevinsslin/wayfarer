@@ -1,7 +1,7 @@
 {
   "name": "wayfarer",
   "description": "Plan a trip as an Obsidian note that the Wayfarer plugin renders as a map: research, day structure, stops with coordinates, planning notes.",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "author": {
     "name": "Kevin Lin",
     "url": "https://github.com/kevinsslin"

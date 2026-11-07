@@ -36,7 +36,7 @@ export async function resolveMapsUrl(input: string, deps: ResolveDeps): Promise<
 
   let expanded = input;
   if (parsed.isShort) {
-    if (!deps.expandShortUrl) throw new ResolveError("Short links are expanded on the desktop app. Paste the full Google Maps link, or convert this one on your computer.");
+    if (!deps.expandShortUrl) throw new ResolveError("Short link expansion is unavailable. Paste the full Google Maps place link instead.");
     expanded = await deps.expandShortUrl(input);
     parsed = parseGoogleMapsUrl(expanded);
     if (!parsed || parsed.isShort) throw new ResolveError("Could not expand the short link");

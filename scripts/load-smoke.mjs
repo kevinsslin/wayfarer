@@ -28,7 +28,8 @@ const fakeEl = () => ({
 });
 
 class Component {
-  register() {}
+  cleanups = [];
+  register(cleanup) { this.cleanups.push(cleanup); }
   registerEvent() {}
   registerDomEvent() {}
   registerInterval() {}
@@ -66,6 +67,7 @@ class SettingStub {
 
 let obsidianLanguage = "en";
 const googleRequests = [];
+let debounceCancellations = 0;
 const obsidianStub = {
   Plugin: PluginStub,
   ItemView: ItemViewStub,
@@ -78,7 +80,8 @@ const obsidianStub = {
   TFile: class {},
   Platform: { isMobile: false, isDesktopApp: true },
   WorkspaceLeaf: class {},
-  debounce: (fn) => fn,
+  debounce: (fn) => Object.assign(fn, { cancel: () => { debounceCancellations++; } }),
+  normalizePath: (path) => path.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\/|\/$/g, ""),
   requestUrl: async (request) => { googleRequests.push(request); return { status: 200, json: { places: [], routes: [] }, text: "" }; },
 };
 const codemirrorStateStub = { RangeSetBuilder: class { ranges = []; add(from, to) { this.ranges.push({ from, to }); } finish() { return this.ranges; } } };
@@ -140,6 +143,15 @@ assert(plugin.ribbons.length === 1, "ribbon icon");
 assert(plugin.settingTabs.length === 1, "settings tab");
 assert(plugin.editorExtensions.length === 1, "editor extension");
 assert(plugin.postProcessors.length === 1, "post processor");
+// Deferred/closed leaves are excluded without a plugin-owned view registry.
+const mapView = plugin.views["wayfarer"]({});
+app.workspace.getLeavesOfType = () => [{ view: mapView }];
+assert(plugin.mapViews.length === 0, "deferred map views are not rendered");
+mapView.map = {};
+assert(plugin.mapViews[0] === mapView, "ready views are queried from the workspace");
+mapView.map = null;
+assert(plugin.mapViews.length === 0, "closed views are excluded immediately");
+app.workspace.getLeavesOfType = () => [];
 assert(plugin.settings.dayHeadingLevel === 2, "default settings loaded");
 assert(plugin.settings.languageCode === "auto", "new installs follow language automatically");
 assert(plugin.googleLanguageCode === "en", "automatic English Google content");
@@ -299,6 +311,15 @@ for (const apiKey of ["", "smoke-key"]) {
   plugin.postProcessors[0]({ querySelectorAll: () => [legacy] }, { getSectionInfo: () => ({ text: '- [Cafe](geo:35,139) %%wf:{"placeId":"ChIJcafe"}%%', lineStart: 0, lineEnd: 0 }) });
   assert(new URL(legacy.attrs.href).searchParams.get("query_place_id") === "ChIJcafe", "legacy Reading-view links open the business by Place ID");
 }
+plugin.settings.googleApiKey = "";
+obsidianStub.Platform.isMobile = true;
+const shortUrl = "https://maps.app.goo.gl/cafe";
+obsidianStub.requestUrl = async () => ({ status: 200, text: '<link rel="canonical" href="https://www.google.com/maps/place/Cafe/data=!3d35!4d139">' });
+openNote("A.md", `## 2027-01-01\n- ${shortUrl}`);
+assert(await plugin.convert(md.editor, 1, shortUrl), "short links resolve through requestUrl on mobile without Node");
+plugin.refresh();
+assert(plugin.current.itinerary.stops[0]?.url === shortUrl, "mobile short-link conversion keeps the original business href");
+obsidianStub.Platform.isMobile = false;
 plugin.settings.googleApiKey = "smoke-key";
 console.log("smoke: OK (original Maps href, keyless import, transport, repeat conversion and Reading view)");
 
@@ -307,6 +328,8 @@ let resolveRequest;
 obsidianStub.requestUrl = () => new Promise((resolve) => { resolveRequest = resolve; });
 const unloading = plugin.fetchDetails();
 plugin.onunload();
+for (const cleanup of plugin.cleanups) cleanup();
+assert(debounceCancellations === 1, "pending editor debounce is canceled on unload");
 resolveRequest(details);
 await unloading;
 assert(source === note, "details arriving after unload cannot edit the note");
