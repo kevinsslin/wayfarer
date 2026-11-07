@@ -28,7 +28,8 @@ const fakeEl = () => ({
 });
 
 class Component {
-  register() {}
+  cleanups = [];
+  register(cleanup) { this.cleanups.push(cleanup); }
   registerEvent() {}
   registerDomEvent() {}
   registerInterval() {}
@@ -66,6 +67,7 @@ class SettingStub {
 
 let obsidianLanguage = "en";
 const googleRequests = [];
+let debounceCancellations = 0;
 const obsidianStub = {
   Plugin: PluginStub,
   ItemView: ItemViewStub,
@@ -78,10 +80,11 @@ const obsidianStub = {
   TFile: class {},
   Platform: { isMobile: false, isDesktopApp: true },
   WorkspaceLeaf: class {},
-  debounce: (fn) => fn,
+  debounce: (fn) => Object.assign(fn, { cancel: () => { debounceCancellations++; } }),
+  normalizePath: (path) => path.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\/|\/$/g, ""),
   requestUrl: async (request) => { googleRequests.push(request); return { status: 200, json: { places: [], routes: [] }, text: "" }; },
 };
-const codemirrorStateStub = { RangeSetBuilder: class { add() {} finish() { return {}; } } };
+const codemirrorStateStub = { RangeSetBuilder: class { ranges = []; add(from, to) { this.ranges.push({ from, to }); } finish() { return this.ranges; } } };
 const codemirrorViewStub = {
   Decoration: { replace: () => ({}) },
   EditorView: {},
@@ -140,6 +143,15 @@ assert(plugin.ribbons.length === 1, "ribbon icon");
 assert(plugin.settingTabs.length === 1, "settings tab");
 assert(plugin.editorExtensions.length === 1, "editor extension");
 assert(plugin.postProcessors.length === 1, "post processor");
+// Deferred/closed leaves are excluded without a plugin-owned view registry.
+const mapView = plugin.views["wayfarer"]({});
+app.workspace.getLeavesOfType = () => [{ view: mapView }];
+assert(plugin.mapViews.length === 0, "deferred map views are not rendered");
+mapView.map = {};
+assert(plugin.mapViews[0] === mapView, "ready views are queried from the workspace");
+mapView.map = null;
+assert(plugin.mapViews.length === 0, "closed views are excluded immediately");
+app.workspace.getLeavesOfType = () => [];
 assert(plugin.settings.dayHeadingLevel === 2, "default settings loaded");
 assert(plugin.settings.languageCode === "auto", "new installs follow language automatically");
 assert(plugin.googleLanguageCode === "en", "automatic English Google content");
@@ -150,7 +162,8 @@ await plugin.resolveDeps().places.searchText("Tokyo Station");
 assert(JSON.parse(googleRequests.at(-1).body).languageCode === "ja", "Places search receives resolved language");
 await plugin.resolveDeps().places.details("smoke-place");
 assert(new URL(googleRequests.at(-1).url).searchParams.get("languageCode") === "ja", "Places details receive resolved language");
-await plugin.router.fetch([{from:{lat:35.68,lng:139.76},to:{lat:35.69,lng:139.77},mode:"walk",key:"smoke",file:""}]);
+plugin.router.legsFor({ stops: [{lat:35.68,lng:139.76}, {lat:35.69,lng:139.77,transport:"walk"}] }, null);
+await new Promise((resolve) => setImmediate(resolve));
 assert(JSON.parse(googleRequests.at(-1).body).languageCode === "ja", "Routes receive resolved language");
 plugin.loadData = async () => ({languageCode:"zh-TW", uiLanguage:"auto"});
 await plugin.loadSettings();
@@ -159,5 +172,167 @@ await plugin.settingTabs[0].setControlValue("languageCode", "auto");
 assert(plugin.googleLanguageCode === "ja", "existing users can opt into automatic language");
 plugin.settings.uiLanguage = "en";
 assert(plugin.googleLanguageCode === "en", "explicit interface language overrides Obsidian");
+// Exercise the actual bundled plugin against a reused MarkdownView, as Obsidian
+// does when another file opens in the same pane. No Google network calls.
+plugin.settings.autoOpen = false;
+plugin.settings.googleApiKey = "smoke-key";
+const md = new obsidianStub.MarkdownView();
+let source = "";
+md.getMode = () => "preview";
+md.editor = {
+  getValue: () => source,
+  lineCount: () => source.split("\n").length,
+  getLine: (line) => source.split("\n")[line] ?? "",
+  getCursor: () => ({ line: 1, ch: 0 }),
+  replaceRange: (text, from, to) => {
+    const lines = source.split("\n");
+    lines[from.line] = lines[from.line].slice(0, from.ch) + text + lines[to.line].slice(to.ch);
+    source = lines.join("\n");
+  },
+};
+app.workspace.getActiveViewOfType = () => md;
+app.workspace.getLeavesOfType = (type) => type === "markdown" ? [{ view: md }] : [];
+const files = new Map();
+const openNote = (path, text) => {
+  if (!files.has(path)) files.set(path, Object.assign(new obsidianStub.TFile(), { path }));
+  md.file = files.get(path);
+  source = text;
+  plugin.refresh();
+};
+const writes = [];
+app.vault = { process: async (file, transform) => { writes.push(file.path); source = transform(source); } };
+const note = "## 2027-01-01\n- [Hotel](geo:35,139)";
+const details = { status: 200, json: { places: [{ id: "smoke-place", displayName: { text: "Hotel" }, location: { latitude: 35, longitude: 139 }, rating: 4.5 }] } };
+for (const mode of ["preview", "source"]) {
+  md.getMode = () => mode;
+  let resolveRequest;
+  obsidianStub.requestUrl = () => new Promise((resolve) => { resolveRequest = resolve; });
+  openNote("A.md", note);
+  const pending = plugin.fetchDetails();
+  openNote("B.md", note);
+  resolveRequest(details);
+  await pending;
+  assert(source === note, `${mode}: pending details cannot edit a different note`);
+  openNote("A.md", note);
+  const normal = plugin.fetchDetails();
+  resolveRequest(details);
+  await normal;
+  assert(source.includes('"placeId":"smoke-place"'), `${mode}: details still save in the original note`);
+}
+
+// File identity is checked again inside vault.process, which may run later.
+md.getMode = () => "preview";
+openNote("A.md", note);
+let processLater;
+app.vault.process = (file, transform) => new Promise((resolve) => {
+  processLater = () => { assert(transform(note) === note, "queued file write is discarded after switching"); resolve(); };
+});
+const queued = plugin.rewriteLine(md, 1, (line) => line + " SHOULD NOT WRITE");
+openNote("B.md", note);
+processLater();
+await queued;
+
+for (const bulk of [false, true]) {
+  let resolveRequest;
+  obsidianStub.requestUrl = () => new Promise((resolve) => { resolveRequest = resolve; });
+  const url = "https://www.google.com/maps/place/Hotel/@35,139,17z";
+  openNote("A.md", "## 2027-01-01\n- " + url);
+  const pending = bulk ? plugin.convertAll(md.editor) : plugin.convert(md.editor, 1, url);
+  openNote("B.md", "## 2027-01-01\n- " + url);
+  resolveRequest(details);
+  await pending;
+  assert(source.includes(url), `${bulk ? "bulk" : "single"} conversion cannot edit the replacement note`);
+}
+
+// A route result must still belong to the live departure and destination.
+md.getMode = () => "source";
+const routeNote = "## 2027-01-01\n- 08:00 [A](geo:35,139)\n- 🚆 [B](geo:35.1,139.1)";
+const savedLeg = { from: "35.0000,139.0000", to: "35.1000,139.1000", via: "train", s: 600, m: 10000, departure: "2026-12-31T23:00:00.000Z" };
+for (const changed of [routeNote.replace("08:00", "20:00"), routeNote.replace("35.1,139.1", "36,140"), routeNote.replace("35,139", "34,138")]) {
+  openNote("A.md", routeNote);
+  const oldStop = plugin.current.itinerary.stops[1];
+  source = changed; // Also exercise edits before the editor-change debounce fires.
+  plugin.setStopMeta(oldStop, { leg: savedLeg }, true);
+  assert(source === changed, "stale route result is discarded after an itinerary edit");
+}
+openNote("A.md", routeNote);
+plugin.setStopMeta(plugin.current.itinerary.stops[1], { leg: savedLeg }, true);
+assert(source.includes('"departure"'), "a matching route still saves to the original stop");
+
+// A converted stop retains its actual href, including after transport edits
+// and another conversion pass. This also works without any API key.
+for (const apiKey of ["", "smoke-key"]) {
+  plugin.settings.googleApiKey = apiKey;
+  let requests = 0;
+  obsidianStub.requestUrl = async () => { requests++; return details; };
+  const url = "https://www.google.com/maps/place/Hotel/@35,139,17z";
+  openNote("A.md", `## 2027-01-01\n- [My $& hotel](${url})`);
+  assert(await plugin.convert(md.editor, 1, url), "place link converts to a mapped stop");
+  assert(source.includes(`[My $& hotel](${url})`) && !source.includes("geo:"), "original href and user label survive conversion");
+  plugin.refresh();
+  const stop = plugin.current.itinerary.stops[0];
+  assert(stop?.url === url && stop.lat === 35 && stop.lng === 139, "reopening the note reads the preserved link's pin");
+  plugin.setStopTransport(stop, "walk");
+  assert(source.includes(`[My $& hotel](${url})`) && source.includes("🚶"), "transport edits keep the original href");
+  const before = source, count = requests;
+  await plugin.convertAll(md.editor);
+  assert(source === before && requests === count, "a converted link is not fetched or converted again");
+
+  const doc = {
+    sliceString: (from, to) => source.slice(from, to),
+    lineAt: (at) => ({ number: source.slice(0, at).split("\n").length }),
+  };
+  const view = { visibleRanges: [{ from: 0, to: source.length }], state: { doc, selection: { main: { head: 0 } } } };
+  const decorations = new plugin.editorExtensions[0].cls(view).decorations;
+  assert(decorations.length === 1 && source.slice(decorations[0].from, decorations[0].to).startsWith("%%wf:"), "Live Preview decorates the metadata while keeping the original link");
+
+  const changedUrl = url.replace("/Hotel/", "/Store/");
+  source = source.replace(`[My $& hotel](${url})`, () => `[My $& hotel](${changedUrl})`);
+  plugin.refresh();
+  assert(plugin.current.itinerary.stops.length === 0, "editing a place href invalidates its old pin");
+  await plugin.convertAll(md.editor);
+  plugin.refresh();
+  assert(plugin.current.itinerary.stops[0]?.url === changedUrl && (source.match(/%%wf:/g) ?? []).length === 1, "reconversion replaces stale metadata instead of duplicating it");
+  source = before;
+
+  // Reading view leaves new links alone and resolves legacy geo links by ID.
+  const anchor = (name, href) => ({
+    textContent: name, attrs: { href },
+    getAttribute(key) { return this.attrs[key]; },
+    setAttribute(key, value) { this.attrs[key] = value; },
+    setAttr(key, value) { this.attrs[key] = value; },
+    addClass() {}, insertAdjacentElement() {},
+  });
+  globalThis.createSpan = () => ({ textContent: "", title: "" });
+  const original = anchor("My $& hotel", url);
+  plugin.postProcessors[0]({ querySelectorAll: () => [original] }, { getSectionInfo: () => ({ text: source, lineStart: 0, lineEnd: 1 }) });
+  assert(original.attrs.href === url, "Reading view preserves the store href");
+  const legacy = anchor("Cafe", "geo:35,139");
+  plugin.postProcessors[0]({ querySelectorAll: () => [legacy] }, { getSectionInfo: () => ({ text: '- [Cafe](geo:35,139) %%wf:{"placeId":"ChIJcafe"}%%', lineStart: 0, lineEnd: 0 }) });
+  assert(new URL(legacy.attrs.href).searchParams.get("query_place_id") === "ChIJcafe", "legacy Reading-view links open the business by Place ID");
+}
+plugin.settings.googleApiKey = "";
+obsidianStub.Platform.isMobile = true;
+const shortUrl = "https://maps.app.goo.gl/cafe";
+obsidianStub.requestUrl = async () => ({ status: 200, text: '<link rel="canonical" href="https://www.google.com/maps/place/Cafe/data=!3d35!4d139">' });
+openNote("A.md", `## 2027-01-01\n- ${shortUrl}`);
+assert(await plugin.convert(md.editor, 1, shortUrl), "short links resolve through requestUrl on mobile without Node");
+plugin.refresh();
+assert(plugin.current.itinerary.stops[0]?.url === shortUrl, "mobile short-link conversion keeps the original business href");
+obsidianStub.Platform.isMobile = false;
+plugin.settings.googleApiKey = "smoke-key";
+console.log("smoke: OK (original Maps href, keyless import, transport, repeat conversion and Reading view)");
+
+openNote("A.md", note);
+let resolveRequest;
+obsidianStub.requestUrl = () => new Promise((resolve) => { resolveRequest = resolve; });
+const unloading = plugin.fetchDetails();
 plugin.onunload();
+for (const cleanup of plugin.cleanups) cleanup();
+assert(debounceCancellations === 1, "pending editor debounce is canceled on unload");
+resolveRequest(details);
+await unloading;
+assert(source === note, "details arriving after unload cannot edit the note");
+assert(!writes.includes("B.md"), "no writes were directed to the replacement note");
+console.log("smoke: OK (async note identity, preview/source writes, conversion and unload)");
 console.log("smoke: OK (view, 6 commands, ribbon, settings tab, editor extension, post processor)");

@@ -44,3 +44,21 @@ describe("tripSkeleton", () => {
     expect(tripSkeleton(new Date(2026, 8, 30), 2)).toContain("## 2026-10-01 週四");
   });
 });
+
+
+describe("place identity", () => {
+  it("opens the original store link before a generated URL", () => {
+    const url = "https://maps.app.goo.gl/originalStore";
+    expect(placeUrl({ lat: 35, lng: 139, url, meta: { placeId: "ChIJfallback" } })).toBe(url);
+  });
+  it("opens a legacy geo stop's business using its Place ID", () => {
+    const stop = { name: "Cafe", lat: 35, lng: 139, meta: { placeId: "ChIJcafe" } };
+    const url = new URL(placeUrl(stop));
+    expect(url.searchParams.get("query_place_id")).toBe("ChIJcafe");
+    expect(url.searchParams.get("query")).toBe("Cafe");
+    expect(new URL(navigateUrl(stop)).searchParams.get("destination_place_id")).toBe("ChIJcafe");
+  });
+  it("ignores foreign stored URLs and keeps coordinate-only notes usable", () => {
+    expect(placeUrl({ lat: 35, lng: 139, url: "javascript:alert(1)" })).toBe(placeUrl({ lat: 35, lng: 139 }));
+  });
+});

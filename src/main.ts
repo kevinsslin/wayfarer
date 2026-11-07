@@ -1,4 +1,4 @@
-import { MarkdownView, Notice, Platform, Plugin, TFile, debounce, getLanguage, type Editor, type MarkdownFileInfo, type WorkspaceLeaf } from "obsidian";
+import { MarkdownView, Notice, Platform, Plugin, TFile, debounce, getLanguage, normalizePath, type Editor, type MarkdownFileInfo, type WorkspaceLeaf } from "obsidian";
 import { isGoogleMapsUrl } from "./core/gmaps-url";
 import { dayAtLine, moveBlock, parseItinerary, patchLineMeta, setTransportOnLine, stopStillAt, type Itinerary, type PlaceMeta, type Stop } from "./core/itinerary";
 import type { Transport } from "./core/category";
@@ -12,9 +12,10 @@ import { NewTripModal } from "./ui/new-trip-modal";
 import { tripSkeleton } from "./core/gmaps-out";
 import { tripKml } from "./core/kml";
 import { firstEmoji } from "./core/category";
-import { LegRouter } from "./routing";
+import { dateForDay, LegRouter, transitContext } from "./routing";
 import { PhotoCache, photoFor, type StopPhoto } from "./photos";
 import { getLocale, localeFor, setLocale, t } from "./core/i18n";
+import { bareLeg } from "./core/legs";
 import { googleLanguageFor } from "./core/google-language";
 
 /**
@@ -25,10 +26,16 @@ import { googleLanguageFor } from "./core/google-language";
  */
 export default class WayfarerPlugin extends Plugin {
   settings: WayfarerSettings = { ...DEFAULT_SETTINGS };
-  private views = new Set<WayfarerView>();
+  /** Let Obsidian own view lifetimes, including deferred leaves after reload. */
+  private get mapViews(): WayfarerView[] {
+    if (this.unloaded) return [];
+    return this.app.workspace.getLeavesOfType(VIEW_TYPE_WAYFARER)
+      .map((leaf) => leaf.view)
+      .filter((view): view is WayfarerView => view instanceof WayfarerView && view.isReady);
+  }
   readonly router = new LegRouter(
     () => ({ ...this.settings, languageCode: this.googleLanguageCode }),
-    () => { for (const v of this.views) v.redraw(); },
+    () => { for (const v of this.mapViews) v.redraw(); },
     (to, leg, file) => { if (file === this.current?.file.path) this.setStopMeta(to, { leg }, true); },
     (e) => this.googleRefused(e),
   );
@@ -96,18 +103,32 @@ export default class WayfarerPlugin extends Plugin {
     this.addCommand({
       id: "fetch-details",
       name: "Fetch Google details for stops without them",
-      callback: () => void this.fetchDetails(),
+      checkCallback: (checking) => {
+        if (!this.activeMarkdown()?.file) return false;
+        if (!checking) void this.fetchDetails();
+        return true;
+      },
     });
 
     this.registerEvent(this.app.workspace.on("editor-paste", (evt, editor) => this.onPaste(evt, editor)));
     this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.refresh()));
     // A different note opened in the same pane changes no leaf, only the file.
     this.registerEvent(this.app.workspace.on("file-open", () => this.refresh()));
-    this.registerEvent(this.app.workspace.on("editor-change", debounce((editor: Editor, info: MarkdownFileInfo) => this.onEdit(editor, info), 250, true)));
+    const onEditorChange = debounce((editor: Editor, info: MarkdownFileInfo) => this.onEdit(editor, info), 250, true);
+    this.registerEvent(this.app.workspace.on("editor-change", onEditorChange));
+    this.register(() => onEditorChange.cancel());
     this.registerEvent(this.app.metadataCache.on("changed", (file) => { if (file.path === this.current?.file.path) this.refresh(); }));
-    this.registerDomEvent(document, "selectionchange", () => this.trackCursor());
-    this.registerDomEvent(document, "keyup", () => this.trackCursor());
-    this.registerDomEvent(document, "mouseup", () => this.trackCursor());
+    const documents = new WeakSet<Document>();
+    const trackDocument = (doc: Document) => {
+      if (documents.has(doc)) return;
+      documents.add(doc);
+      this.registerDomEvent(doc, "selectionchange", () => this.trackCursor());
+      this.registerDomEvent(doc, "keyup", () => this.trackCursor());
+      this.registerDomEvent(doc, "mouseup", () => this.trackCursor());
+    };
+    trackDocument(document);
+    this.app.workspace.iterateAllLeaves((leaf) => trackDocument(leaf.view.containerEl.doc));
+    this.registerEvent(this.app.workspace.on("window-open", (_workspaceWindow, win) => trackDocument(win.document)));
 
     this.app.workspace.onLayoutReady(() => this.refresh());
   }
@@ -116,8 +137,8 @@ export default class WayfarerPlugin extends Plugin {
   onunload(): void {
     this.unloaded = true;
     if (this.autoOpenTimer !== null) window.clearTimeout(this.autoOpenTimer);
+    this.router.dispose();
     this.photos.clear();
-    this.views.clear();
   }
 
   /* ---------- settings ---------- */
@@ -149,14 +170,6 @@ export default class WayfarerPlugin extends Plugin {
 
   /* ---------- map pane ---------- */
 
-  attachView(v: WayfarerView): void {
-    this.views.add(v);
-    this.refresh();
-  }
-  detachView(v: WayfarerView): void {
-    this.views.delete(v);
-  }
-
   async openMap(): Promise<void> {
     const existing = this.mapLeaf();
     if (existing) {
@@ -185,6 +198,7 @@ export default class WayfarerPlugin extends Plugin {
 
   /** Re-parses the active markdown note and pushes it to every map pane. */
   refresh(): void {
+    if (this.unloaded) return;
     const md = this.activeMarkdown();
     if (!md?.file) {
       // Keep showing the last note while the user is in the map pane or settings.
@@ -194,7 +208,7 @@ export default class WayfarerPlugin extends Plugin {
     const itinerary = parseItinerary(md.editor.getValue(), { maxHeadingLevel: this.settings.dayHeadingLevel });
     this.current = { file: md.file, itinerary };
     this.pushToViews();
-    if (this.settings.autoOpen && itinerary.stops.length > 0 && this.views.size === 0 && !Platform.isMobile) this.autoOpenSoon();
+    if (this.settings.autoOpen && itinerary.stops.length > 0 && this.mapViews.length === 0 && !Platform.isMobile) this.autoOpenSoon();
   }
 
   /**
@@ -207,7 +221,7 @@ export default class WayfarerPlugin extends Plugin {
     if (this.autoOpenTimer !== null) return;
     this.autoOpenTimer = window.setTimeout(() => {
       this.autoOpenTimer = null;
-      if (this.views.size === 0 && !this.mapLeaf()) void this.openMap();
+      if (this.mapViews.length === 0 && !this.mapLeaf()) void this.openMap();
     }, 600);
   }
 
@@ -215,7 +229,7 @@ export default class WayfarerPlugin extends Plugin {
     if (!this.current) return;
     const md = this.activeMarkdown();
     const day = md?.file?.path === this.current.file.path ? dayAtLine(this.current.itinerary, md.editor.getCursor().line) : -1;
-    for (const v of this.views) v.render(this.current.file, this.current.itinerary, day, md?.editor.getCursor().line ?? -1);
+    for (const v of this.mapViews) v.render(this.current.file, this.current.itinerary, day, md?.editor.getCursor().line ?? -1);
   }
 
   private onEdit(editor: Editor, info: MarkdownFileInfo): void {
@@ -228,12 +242,12 @@ export default class WayfarerPlugin extends Plugin {
   }
 
   private trackCursor(): void {
-    if (this.views.size === 0 || !this.current) return;
+    if (this.mapViews.length === 0 || !this.current) return;
     const md = this.activeMarkdown();
     if (!md?.file || md.file.path !== this.current.file.path) return;
     const line = md.editor.getCursor().line;
     const day = dayAtLine(this.current.itinerary, line);
-    for (const v of this.views) v.onCursor(line, day);
+    for (const v of this.mapViews) v.onCursor(line, day);
   }
 
   /**
@@ -266,7 +280,7 @@ export default class WayfarerPlugin extends Plugin {
       return;
     }
     const kml = tripKml(it, file.basename, getLocale() === "en" ? "Day {n}" : "第 {n} 天");
-    const path = `${file.parent && file.parent.path !== "/" ? file.parent.path + "/" : ""}${file.basename}.kml`;
+    const path = normalizePath(`${file.parent && file.parent.path !== "/" ? file.parent.path + "/" : ""}${file.basename}.kml`);
     const existing = this.app.vault.getAbstractFileByPath(path);
     try {
       if (existing instanceof TFile) await this.app.vault.modify(existing, kml);
@@ -290,12 +304,19 @@ export default class WayfarerPlugin extends Plugin {
     const md = this.activeMarkdown();
     if (!md?.file || !this.current || md.file.path !== this.current.file.path) return;
     // The same place can appear twice (the hotel at the end of every day), so the line it was parsed from is tried first.
-    const stops = this.current.itinerary.stops;
+    const itinerary = parseItinerary(md.editor.getValue(), { maxHeadingLevel: this.settings.dayHeadingLevel });
+    const stops = itinerary.stops;
     const live = stops.find((s) => s.line === stop.line && s.from === stop.from && s.lat === stop.lat && s.lng === stop.lng)
       ?? stops.find((s) => s.lat === stop.lat && s.lng === stop.lng && s.name === stop.name)
       ?? (quiet ? null : stop);
     if (!live) return;
-    void this.rewriteLine(md, live.line, (text) => (stopStillAt(text, live) ? patchLineMeta(text, patch, live) : text));
+    if (patch.leg) {
+      const day = itinerary.days[live.dayIndex];
+      const from = day?.stops[live.index - 1];
+      if (!from || !bareLeg(from, { ...live, meta: { ...live.meta, leg: patch.leg } }, transitContext(dateForDay(day), from, live)).routed) return;
+    }
+    const expectedText = md.editor.getValue();
+    void this.rewriteLine(md, live.line, (text) => (md.editor.getValue() === expectedText && stopStillAt(text, live) ? patchLineMeta(text, patch, live) : text));
   }
 
   /**
@@ -303,28 +324,33 @@ export default class WayfarerPlugin extends Plugin {
    * works. In Reading view the editor is hidden and Obsidian does not save
    * what is typed into it, so the change goes to the file instead.
    */
-  private async rewriteLine(md: MarkdownView, line: number, fn: (text: string) => string): Promise<void> {
+  private async rewriteLine(md: MarkdownView, line: number, fn: (text: string) => string, file = md.file): Promise<boolean> {
     // A result that arrives after the plugin was disabled is dropped.
-    if (this.unloaded) return;
+    if (!file || this.unloaded || md.file !== file) return false;
+    const valid = () => !this.unloaded && md.file === file;
+    let changed = false;
     if (md.getMode() === "preview" && md.file) {
-      await this.app.vault.process(md.file, (data) => {
+      await this.app.vault.process(file, (data) => {
+        if (!valid()) return data;
         const lines = data.split("\n");
         if (line >= lines.length) return data;
         // The line was chosen from the editor's buffer; if the file on disk reads differently there, the two are out of step and nothing is written.
         if (line < md.editor.lineCount() && md.editor.getLine(line) !== lines[line]) return data;
         const next = fn(lines[line]);
         if (next === lines[line]) return data;
+        changed = true;
         lines[line] = next;
         return lines.join("\n");
       });
       this.refresh();
     } else {
       // The editor change reaches the pane through the editor-change handler; a refresh here would parse and draw once more per write.
-      if (line >= md.editor.lineCount()) return;
+      if (line >= md.editor.lineCount()) return false;
       const text = md.editor.getLine(line);
       const next = fn(text);
-      if (next !== text) md.editor.replaceRange(next, { line, ch: 0 }, { line, ch: text.length });
+      if (next !== text) { md.editor.replaceRange(next, { line, ch: 0 }, { line, ch: text.length }); changed = true; }
     }
+    return changed;
   }
 
   /** Writes the transport picked in the pane as the emoji before the stop's link, so the text says what the map says. */
@@ -346,20 +372,24 @@ export default class WayfarerPlugin extends Plugin {
     const cur = this.current;
     if (!md?.file || !cur || md.file.path !== cur.file.path) { new Notice(t("empty")); return; }
     if (!this.settings.googleApiKey) { new Notice(`Wayfarer: ${t("key_needed")}`); return; }
+    const file = md.file;
+    const valid = () => !this.unloaded && md.file === file;
     const places = googlePlaces(this.settings.googleApiKey, this.googleLanguageCode);
     const todo = cur.itinerary.stops.filter((s) => !s.meta?.placeId);
     if (todo.length === 0) { new Notice("Wayfarer: every stop already has its details"); return; }
     let done = 0;
     let missed = 0;
     for (const stop of todo) {
+      if (!valid()) return;
       try {
         const p = await places.searchText(stop.name, stop);
+        if (!valid()) return;
         if (!p?.meta || distanceM(p, stop) > 300) { missed++; continue; }
         const { rating, hours, address, website, placeId, type, photo, utc } = p.meta;
         // Only when the same link is still on that line; the note may have changed while Google answered.
-        await this.rewriteLine(md, stop.line, (text) => (stopStillAt(text, stop) ? patchLineMeta(text, { rating, hours, address, website, placeId, type, photo, utc }, stop) : text));
-        done++;
+        if (await this.rewriteLine(md, stop.line, (text) => (stopStillAt(text, stop) ? patchLineMeta(text, { rating, hours, address, website, placeId, type, photo, utc }, stop) : text), file)) done++;
       } catch (e) {
+        if (!valid()) return;
         if (e instanceof GoogleApiError) { this.googleRefused(e); return; }
         missed++;
       }
@@ -427,20 +457,33 @@ export default class WayfarerPlugin extends Plugin {
 
   private resolveDeps(): ResolveDeps {
     return {
-      expandShortUrl: Platform.isDesktop ? expandShortUrl : undefined,
+      expandShortUrl,
       places: this.settings.googleApiKey ? googlePlaces(this.settings.googleApiKey, this.googleLanguageCode) : undefined,
     };
   }
 
+  /** Editor instances can be reused by a pane when it opens a different note. */
+  private editorFile(editor: Editor): TFile | null {
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      if (leaf.view instanceof MarkdownView && leaf.view.editor === editor) return leaf.view.file;
+    }
+    return null;
+  }
+
   /** Resolves one link and swaps it for a stop; true when the note was changed. */
   private async convert(editor: Editor, line: number, url: string): Promise<boolean> {
+    const file = this.editorFile(editor);
+    const valid = () => !this.unloaded && !!file && this.editorFile(editor) === file;
+    if (!valid()) return false;
     try {
       const place = await resolveMapsUrl(url, this.resolveDeps());
+      if (!valid()) return false;
       const lineText = editor.getLine(line);
       const hasEmoji = firstEmoji(lineText.slice(0, Math.max(0, lineText.indexOf(url)))) !== null;
       if (replaceUrlInEditor(editor, line, url, stopText(place, this.settings.addEmoji && !hasEmoji))) return true;
       new Notice(`Wayfarer: the link moved before it resolved. ${place.name} is at ${place.lat}, ${place.lng}.`);
     } catch (e) {
+      if (!valid()) return false;
       const msg = e instanceof ResolveError ? e.message : `Could not resolve the link (${(e as Error).message ?? e})`;
       new Notice(`Wayfarer: ${msg}`, 8000);
     }
@@ -448,11 +491,14 @@ export default class WayfarerPlugin extends Plugin {
   }
 
   private async convertAll(editor: Editor): Promise<void> {
+    const file = this.editorFile(editor);
+    const valid = () => !this.unloaded && !!file && this.editorFile(editor) === file;
     let n = 0;
     const failed = new Set<string>();
     for (let line = 0; line < editor.lineCount(); line++) {
       // A line may hold several links; each conversion changes the line, so look again after each.
       for (let guard = 0; guard < 20; guard++) {
+        if (!valid()) return;
         const found = findMapsUrl(editor.getLine(line), failed);
         if (!found) break;
         if (await this.convert(editor, line, found.url)) n++;

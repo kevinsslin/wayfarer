@@ -6,13 +6,13 @@ const place = (name: string): ResolvedPlace => ({ name, lat: 1, lng: 2, source: 
 describe("resolveMapsUrl", () => {
   it("uses coordinates straight from the URL when there is no API key", async () => {
     const r = await resolveMapsUrl("https://www.google.com/maps/place/Senkoji+Temple/@34.409,133.205,17z", {});
-    expect(r).toEqual({ name: "Senkoji Temple", lat: 34.409, lng: 133.205, source: "url" });
+    expect(r).toEqual({ name: "Senkoji Temple", lat: 34.409, lng: 133.205, source: "url", url: "https://www.google.com/maps/place/Senkoji+Temple/@34.409,133.205,17z" });
   });
   it("expands short links with a non-browser fetch first", async () => {
     const expand = vi.fn(async () => "https://www.google.com/maps/search/5.811698,+-55.118891?entry=tts");
     const r = await resolveMapsUrl("https://maps.app.goo.gl/TvPZdQo9HRmnfb4d8", { expandShortUrl: expand });
     expect(expand).toHaveBeenCalledWith("https://maps.app.goo.gl/TvPZdQo9HRmnfb4d8");
-    expect(r).toMatchObject({ lat: 5.811698, lng: -55.118891, source: "url" });
+    expect(r).toMatchObject({ lat: 5.811698, lng: -55.118891, source: "url", url: "https://maps.app.goo.gl/TvPZdQo9HRmnfb4d8" });
   });
   it("refuses short links where expansion is unavailable", async () => {
     await expect(resolveMapsUrl("https://maps.app.goo.gl/x", {})).rejects.toBeInstanceOf(ResolveError);
@@ -36,7 +36,7 @@ describe("resolveMapsUrl", () => {
   it("keeps the link's own pin when the text search lands somewhere else", async () => {
     const far = vi.fn(async () => ({ ...place("Another branch"), lat: 35.68, lng: 139.76 }));
     const r = await resolveMapsUrl("https://www.google.com/maps/place/Senkoji+Temple/@34.409,133.205,17z", { places: { details: async () => null, searchText: far } });
-    expect(r).toEqual({ name: "Senkoji Temple", lat: 34.409, lng: 133.205, source: "url" });
+    expect(r).toEqual({ name: "Senkoji Temple", lat: 34.409, lng: 133.205, source: "url", url: "https://www.google.com/maps/place/Senkoji+Temple/@34.409,133.205,17z" });
   });
   it("falls back to URL coordinates when Places finds nothing", async () => {
     const places = { details: async () => null, searchText: async () => null };
@@ -52,4 +52,12 @@ describe("resolveMapsUrl", () => {
   it("rejects non-maps input", async () => {
     await expect(resolveMapsUrl("https://example.com", {})).rejects.toThrow(/Not a Google Maps/);
   });
+});
+
+
+it("retains the original URL even when Google supplies canonical details", async () => {
+  const input = "https://www.google.com/maps/search/?api=1&query=Cafe&query_place_id=ChIJoriginal";
+  const result = await resolveMapsUrl(input, { places: { details: async () => place("Cafe"), searchText: async () => null } });
+  expect(result.url).toBe(input);
+  expect(result.meta?.placeId).toBe("ChIJoriginal");
 });

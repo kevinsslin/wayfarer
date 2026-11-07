@@ -18,7 +18,7 @@ Saved place details and routed legs travel with the note as hidden metadata. Syn
 
 ## What it does
 
-- **Stops are links.** `[Name](geo:lat,lng)`, the same inline format the [Map View](https://github.com/esm7/obsidian-map-view) plugin reads. You rarely type it: paste a full Google Maps place link and it converts to a stop. Short `maps.app.goo.gl` links can be expanded on desktop.
+- **Stops are links.** Paste a full Google Maps place link to turn it into a stop. The note keeps the original clickable Google Maps link, with coordinates saved as hidden metadata, so clicking the name opens the original place. `[Name](geo:lat,lng)`, the inline format the [Map View](https://github.com/esm7/obsidian-map-view) plugin reads, is also supported. Short `maps.app.goo.gl` links can be expanded on desktop and mobile. If Google prevents automatic expansion, paste the full place link.
 - **Headings are days.** `## 2026-09-17 Thu Up to Senjogahara` starts a day. A range like `## 2026-09-19 ~ 2026-09-26 Tokyo` keeps a stretch you have not planned yet as one block. Undated sections (research, to-dos, candidates) stay in the same note and off the map.
 - **The map follows the note.** Put the cursor on a stop and the map flies there. Pins are coloured and numbered per day, with a line between consecutive stops.
 - **A timeline beside the map.** The day's stops top to bottom with photo, time, name and your remark, and the leg between each pair. Click a card to fly there; drag a card to reorder the note.
@@ -47,7 +47,7 @@ Saved place details and routed legs travel with the note as hidden metadata. Syn
 - [ ] Ryuzu Falls if there is time
 ```
 
-Run **Insert day headings for a trip** to get the headings, then paste links under each. The full date on the heading is what makes weekday, opening-hours and departure checks possible. Indented lines under a stop are its notes. No frontmatter is needed. The complete format is in [FORMAT.md](skills/wayfarer-plan-trip/FORMAT.md).
+Run **Insert day headings for a trip** to get the headings, then paste links under each. The full date on the heading is what makes weekday, opening-hours and departure checks possible. Indented lines under a stop are its notes. No frontmatter is needed. The complete format is in [FORMAT.md](skills/wayfarer-plan-trip/FORMAT.md). Imported Google Maps links need the updated Wayfarer on each device to appear on the map; older versions only recognize `geo:` stops. The original Maps links work as ordinary Markdown links outside the plugin.
 
 ![Rating and hours chips after each link in Reading view](docs/screenshots/reading.jpg)
 
@@ -94,14 +94,14 @@ The skill instructions and this README are written in English. Language support 
 
 ## Google API key
 
-Optional. Without a key you get pins from the link's coordinates and straight-line distances. With a key you also get place details, photos and routed legs. The key is yours, stored in this vault's `.obsidian/plugins/wayfarer/data.json` and never written into a note. Requests go only to Google's Places and Routes endpoints; map tiles come from OpenStreetMap unless you set another tile URL.
+Optional. Without a key you get pins from the link's coordinates and straight-line distances. With a key you also get place details, photos and routed legs. The key is yours, stored in this vault's `.obsidian/plugins/wayfarer/data.json` and never written into a note. Place details, photos and routes use Google's Places and Routes endpoints; expanding a short link downloads its Google Maps page. The plugin does not execute scripts from that page. Map tiles come from OpenStreetMap unless you set another tile URL.
 
 1. In [Google Cloud Console](https://console.cloud.google.com/) create a project and enable billing (Google requires a card even for the free tier; set a budget alert).
 2. Enable **Places API (New)** and **Routes API**.
 3. Create an API key and restrict it to those two APIs.
 4. Paste it in **Settings → Wayfarer → Google API key** and press **Test key**.
 
-Wayfarer reuses saved details and routes to reduce requests. Changing stops or transport, fetching missing details and loading photos can make new requests. Google requires billing for these APIs; consult [current Google Maps Platform pricing](https://developers.google.com/maps/billing-and-pricing/pricing) for allowances and rates. Budget alerts notify you of spending; they do not cap it.
+Wayfarer reuses saved details and routes to reduce requests. A saved route must match both endpoints, the transport mode and, for transit, the departure date and time. Older routes without this information show straight-line distance until refreshed with a key. Route requests share a three-request limit and pause after a refusal. Changing stops or transport, fetching missing details and loading photos can make new requests. Google requires billing for these APIs; consult [current Google Maps Platform pricing](https://developers.google.com/maps/billing-and-pricing/pricing) for allowances and rates. Budget alerts notify you of spending; they do not cap it.
 
 ## Installation
 
@@ -109,7 +109,7 @@ In Obsidian, open **Settings → Community plugins → Browse**, search for **Wa
 
 For manual installation, download `main.js`, `manifest.json` and `styles.css` from the [latest release](https://github.com/kevinsslin/wayfarer/releases/latest) into `<vault>/.obsidian/plugins/wayfarer/` and enable it under **Settings → Community plugins**. [BRAT](https://github.com/TfTHacker/obsidian42-brat) with `kevinsslin/wayfarer` also works.
 
-Works on desktop and mobile. On a phone the map opens as its own tab and the timeline folds away until you tap for it. The one desktop-only feature is expanding `maps.app.goo.gl` short links, which needs Node's https; on a phone, paste the full link or let the conversion happen on the computer. Saved stops, routes and details can be read on desktop and mobile. The last browsed stop is cached locally per note and device; it is not synced as travel progress.
+Works on desktop and mobile. On a phone the map opens as its own tab and the timeline folds away until you tap for it. Short links use Obsidian’s network API on both platforms; if Google blocks expansion, paste the full place URL. Saved stops, routes and details can be read on desktop and mobile. The last browsed stop is cached locally per note and device; it is not synced as travel progress.
 
 ## Commands
 

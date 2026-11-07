@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseItinerary } from "./itinerary";
+import { formatStop, parseItinerary } from "./itinerary";
 import { tripKml } from "./kml";
 
 describe("tripKml", () => {
@@ -27,4 +27,13 @@ describe("tripKml", () => {
   it("is deterministic", () => {
     expect(tripKml(it2, "Japan 2026")).toBe(kml);
   });
+});
+
+
+it("exports the original store link alongside the stop's coordinates", () => {
+  const url = "https://www.google.com/maps/search/?api=1&query=Cafe&query_place_id=ChIJcafe";
+  const note = "## 2027-01-01\n- " + formatStop("Cafe", 35, 139, undefined, undefined, url);
+  const result = tripKml(parseItinerary(note), "Trip");
+  expect(result).toContain(url.replace(/&/g, "&amp;"));
+  expect(result).toContain("<coordinates>139,35,0</coordinates>");
 });

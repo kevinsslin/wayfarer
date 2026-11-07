@@ -1,6 +1,6 @@
 {
   "name": "wayfarer",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Trip planning in Obsidian: paste Google Maps links, write days as headings, see the plan on a map beside the note.",
   "type": "module",
   "license": "MIT",
@@ -47,6 +47,7 @@
     "tslib": "^2.8.1",
     "typescript": "^5.6.3",
     "typescript-eslint": "^8.16.0",
-    "vitest": "^3.2.0"
+    "vitest": "^4.1.12",
+    "vite": "^7.3.7"
   }
 }

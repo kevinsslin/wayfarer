@@ -1,32 +1,35 @@
 import type { MarkdownPostProcessor } from "obsidian";
 import { todayHours } from "./map-view";
-import { parseMeta, type PlaceMeta } from "../core/itinerary";
+import { stopLinks, type StopLink } from "../core/itinerary";
+import { placeUrl } from "../core/gmaps-out";
+import { isGoogleMapsUrl } from "../core/gmaps-url";
 
-/**
- * Reading view: `geo:` links open Google Maps (Obsidian has no handler for
- * the geo scheme), and the `%%wf:{}%%` comment, which Obsidian already hides,
- * is surfaced as a rating and hours chip after the link.
- */
+/** Keep original Maps links and expose saved facts. Legacy geo links prefer Place IDs. */
 export const readingPostProcessor: MarkdownPostProcessor = (el, ctx) => {
-  const links = el.querySelectorAll<HTMLAnchorElement>('a[href^="geo:"]');
+  const links = [...el.querySelectorAll<HTMLAnchorElement>("a[href]")].filter((a) => {
+    const href = a.getAttribute("href") ?? "";
+    return href.startsWith("geo:") || isGoogleMapsUrl(href);
+  });
   if (links.length === 0) return;
   const section = ctx.getSectionInfo(el);
   const occurrences = section ? linksIn(section.text, section.lineStart, section.lineEnd) : [];
 
   links.forEach((a) => {
-    const m = /^geo:(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/.exec(a.getAttribute("href") ?? "");
-    if (!m) return;
-    a.setAttribute("href", `https://www.google.com/maps/search/?api=1&query=${m[1]},${m[2]}`);
-    a.addClass("wf-geo-link");
+    const href = a.getAttribute("href") ?? "";
+    const geo = /^geo:(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/.exec(href);
+    const name = a.textContent ?? "";
+    const hit = occurrences.find((o) => !o.used && o.name === name && (geo
+      ? !o.url && o.lat === Number(geo[1]) && o.lng === Number(geo[2])
+      : o.url === href));
+    if (hit) hit.used = true;
+    if (geo) {
+      a.setAttribute("href", placeUrl(hit ?? { lat: Number(geo[1]), lng: Number(geo[2]) }));
+      a.addClass("wf-geo-link");
+    }
     a.setAttr("target", "_blank");
     a.setAttr("rel", "noopener");
 
-    // The same place can be linked twice in a section; each rendered link takes the next unused source link.
-    const name = a.textContent ?? "";
-    const hit = occurrences.find((o) => !o.used && o.name === name && o.lat === m[1] && o.lng === m[2]);
-    if (!hit) return;
-    hit.used = true;
-    const meta = hit.meta;
+    const meta = hit?.meta;
     if (!meta) return;
     const chip = createSpan({ cls: "wf-meta" });
     const bits: string[] = [];
@@ -40,23 +43,14 @@ export const readingPostProcessor: MarkdownPostProcessor = (el, ctx) => {
   });
 };
 
-interface Occurrence { name: string; lat: string; lng: string; meta: PlaceMeta | undefined; used: boolean }
-
-const LINK_RE = /\[([^\]]*)\]\(geo:(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)[^)]*\)(?:\s*%%wf:(\{.*?\})%%)?/g;
-
+interface Occurrence extends StopLink { used: boolean }
 let lastText = "";
 let lastLines: string[] = [];
 
-/** Geo links of the section's lines in source order. `text` is the whole note, split once and reused across sections. */
 function linksIn(text: string, lineStart: number, lineEnd: number): Occurrence[] {
   if (text !== lastText) {
     lastText = text;
     lastLines = text.split("\n");
   }
-  const src = lastLines.slice(lineStart, lineEnd + 1).join("\n");
-  const out: Occurrence[] = [];
-  LINK_RE.lastIndex = 0;
-  let m: RegExpExecArray | null;
-  while ((m = LINK_RE.exec(src))) out.push({ name: m[1], lat: m[2], lng: m[3], meta: m[4] ? parseMeta(m[4]) : undefined, used: false });
-  return out;
+  return lastLines.slice(lineStart, lineEnd + 1).flatMap((line) => stopLinks(line).map((link) => ({ ...link, used: false })));
 }

@@ -1,16 +1,24 @@
+import { isGoogleMapsUrl } from "./gmaps-url";
 import type { Stop } from "./itinerary";
 import type { Transport } from "./category";
 
 /** Omit origin so Maps uses the traveller's actual position. Opening this never advances progress. */
-export function navigateUrl(stop: Pick<Stop, "lat" | "lng">, mode?: Transport): string {
+export function navigateUrl(stop: PlaceTarget, mode?: Transport): string {
   const params = new URLSearchParams({ api: "1", destination: `${stop.lat},${stop.lng}`, dir_action: "navigate" });
+  if (stop.meta?.placeId) params.set("destination_place_id", stop.meta.placeId);
   if (mode) params.set("travelmode", mode === "walk" ? "walking" : mode === "bike" ? "bicycling" : mode === "car" || mode === "taxi" ? "driving" : "transit");
   return `https://www.google.com/maps/dir/?${params.toString()}`;
 }
 
-/** Google Maps search URL for one point. Opens the place picker on phone and web. */
-export function placeUrl(stop: Pick<Stop, "lat" | "lng">): string {
-  return `https://www.google.com/maps/search/?api=1&query=${stop.lat},${stop.lng}`;
+type PlaceTarget = Pick<Stop, "lat" | "lng"> & Partial<Pick<Stop, "name" | "meta" | "url">>;
+/** Prefer the original business link, then Place ID, then a coordinate-only fallback. */
+export function placeUrl(stop: PlaceTarget): string {
+  if (stop.url && isGoogleMapsUrl(stop.url)) return stop.url;
+  if (!stop.meta?.placeId) return `https://www.google.com/maps/search/?api=1&query=${stop.lat},${stop.lng}`;
+  const params = new URLSearchParams({ api: "1", query: `${stop.lat},${stop.lng}` });
+  params.set("query", stop.name || `${stop.lat},${stop.lng}`);
+  params.set("query_place_id", stop.meta.placeId);
+  return `https://www.google.com/maps/search/?${params.toString()}`;
 }
 
 /**

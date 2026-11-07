@@ -34,3 +34,19 @@ describe("checkHours across midnight", () => {
     expect(checkHours(hours, 3, 8 * 60)).toEqual({ kind: "not-open-yet", opensAt: 9 * 60 });
   });
 });
+
+
+describe("Chinese prefix day periods", () => {
+  it("checks morning to afternoon ranges with Google separators", () => {
+    for (const separator of ["–", "至", "到"]) {
+      const hours = [`星期一: 上午9:00 ${separator} 下午5:00`];
+      expect(parseDayHours(hours[0]).ranges).toEqual([[540, 1020]]);
+      expect(checkHours(hours, 1, 600)).toEqual({ kind: "ok" });
+      expect(checkHours(hours, 1, 1080)).toEqual({ kind: "already-closed", closedAt: 1020 });
+    }
+  });
+  it("handles overnight and split hours", () => {
+    expect(parseDayHours("星期一：下午6:00 – 上午2:00").ranges).toEqual([[1080, 1560]]);
+    expect(parseDayHours("星期一: 上午9:00 – 上午11:00, 下午1:00 – 下午5:00").ranges).toEqual([[540, 660], [780, 1020]]);
+  });
+});

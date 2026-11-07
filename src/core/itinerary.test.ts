@@ -303,3 +303,63 @@ describe("fences and comments in heading discovery", () => {
     expect(parseMeta('{"via":"walk","leg":{"from":"1,2","via":"driving","s":1,"m":2}}')).toEqual({ via: "walk" });
   });
 });
+
+
+describe("retained Google Maps links", () => {
+  const url = "https://www.google.com/maps/place/Cafe/@35,139,17z";
+  it("round-trips the actual clickable URL, facts, notes and transport", () => {
+    const text = formatStop("Cafe", 35, 139, { placeId: "ChIJcafe", rating: 4.6 }, undefined, url);
+    expect(text).toContain(`[Cafe](${url})`);
+    expect(text).not.toContain("geo:");
+    const stop = parseItinerary(`## 2027-01-01\n- 10:00 🚶 ${text} coffee\n    Bring cash`).stops[0];
+    expect(stop).toMatchObject({ name: "Cafe", url, lat: 35, lng: 139, time: "10:00", transport: "walk", notes: ["Bring cash"], meta: { placeId: "ChIJcafe", rating: 4.6 } });
+    expect(stopStillAt(`- ${text}`, { ...stop, from: 2, to: 2 + `[Cafe](${url})`.length })).toBe(true);
+  });
+  it("keeps per-stop metadata separate on mixed Google and geo link lines", () => {
+    const first = formatStop("Cafe", 35, 139, { placeId: "CAFE" }, undefined, url);
+    const line = `- ${first} 🚆 [Station](geo:36,140) %%wf:{"placeId":"STATION"}%%`;
+    const [a, b] = parseItinerary(line).stops;
+    expect(a.meta?.placeId).toBe("CAFE");
+    expect(b.meta?.placeId).toBe("STATION");
+    const changed = setTransportOnLine(line, a, "bus");
+    expect(parseItinerary(changed).stops[0]).toMatchObject({ url, transport: "bus", lat: 35, lng: 139 });
+    expect(parseItinerary(patchLineMeta(line, { rating: 4.9 }, b)).stops[0].meta?.rating).toBeUndefined();
+    expect(stopStillAt(line.replace("Cafe/@", "Shop/@"), a)).toBe(false);
+  });
+  it("requires valid saved coordinates and ignores unconverted or unrelated links", () => {
+    expect(parseItinerary(`[Cafe](${url})`).stops).toHaveLength(0);
+    expect(parseItinerary(`[Cafe](${url}) %%wf:{"lat":91,"lng":139}%%`).stops).toHaveLength(0);
+    expect(parseItinerary('[Site](https://example.com) %%wf:{"lat":35,"lng":139}%%').stops).toHaveLength(0);
+  });
+  it("encodes parentheses without changing which place the link identifies", () => {
+    const target = "https://www.google.com/maps/place/Cafe+(Annex)/@35,139,17z";
+    const text = formatStop("Cafe (Annex)", 35, 139, undefined, undefined, target);
+    const stop = parseItinerary(text).stops[0];
+    expect(stop.name).toBe("Cafe (Annex)");
+    expect(decodeURI(stop.url!)).toBe(target);
+    expect(stop.lat).toBe(35);
+  });
+});
+
+
+it("patches a stop's metadata after an unrelated website link", () => {
+  const line = '- [A](geo:35,139) [website](https://example.com) %%wf:{"rating":4.2}%%';
+  const stop = parseItinerary(line).stops[0];
+  const result = patchLineMeta(line, { placeId: "ChIJcafe" }, stop);
+  expect(result.match(/%%wf:/g)).toHaveLength(1);
+  expect(parseItinerary(result).stops[0].meta).toMatchObject({ rating: 4.2, placeId: "ChIJcafe" });
+});
+
+it("reads an imported short link from saved coordinates without expanding it again", () => {
+  const url = "https://maps.app.goo.gl/originalCafe";
+  const text = formatStop("Cafe", 35, 139, undefined, undefined, url);
+  expect(parseItinerary(text).stops[0]).toMatchObject({ url, lat: 35, lng: 139 });
+});
+
+
+it("invalidates saved coordinates when the original href is edited", () => {
+  const original = "https://www.google.com/maps/place/Cafe/@35,139,17z";
+  const changed = "https://www.google.com/maps/place/Shop/@35,139,17z";
+  const text = formatStop("Cafe", 35, 139, undefined, undefined, original);
+  expect(parseItinerary(text.replace(`[Cafe](${original})`, `[Cafe](${changed})`)).stops).toHaveLength(0);
+});

@@ -1,0 +1,27 @@
+{
+  "version": "0.1.12",
+  "obsidian": "1.11.7",
+  "environment": "isolated temporary desktop vault; no Google API key",
+  "assets_sha256": {
+    "main.js": "7ea997d3e16af971318f9920ed4dbe3b34ce550035a3a755b01ce428c88ab85a",
+    "manifest.json": "53420316ab67d5467c96eb1197dad482dd460834101289448adf924ff32004a6",
+    "styles.css": "8efba99d459b98d0b979755a09c9688e7d45e298751caf3e2ecd95a3171dd5bf"
+  },
+  "checks": {
+    "pnpm_check": true,
+    "unit_tests": 141,
+    "lint_warnings": 0,
+    "runtime_node_or_electron_imports": 0,
+    "native_plugin_load": true,
+    "native_reload_preserves_one_map_leaf": true,
+    "native_original_business_popup_click": true,
+    "native_short_url_conversion_with_requestUrl": true,
+    "native_saved_coordinate_metadata": true,
+    "native_reading_view_original_href": true,
+    "mobile_bundle_smoke": true
+  },
+  "limitations": [
+    "No physical iOS or Android device validation.",
+    "Google consent or anti-bot pages can prevent short-link expansion; the full place URL is the fallback."
+  ]
+}

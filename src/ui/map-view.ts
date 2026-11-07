@@ -60,6 +60,8 @@ export class WayfarerView extends ItemView {
     super(leaf);
   }
 
+  get isReady(): boolean { return this.map !== null; }
+
   getViewType(): string {
     return VIEW_TYPE_WAYFARER;
   }
@@ -147,7 +149,7 @@ export class WayfarerView extends ItemView {
     this.register(() => chromeAttributes.disconnect());
     const observeChrome = () => {
       const header = root.parentElement?.querySelector(".view-header");
-      const chrome = [...document.querySelectorAll(".mobile-navbar, .mobile-toolbar")];
+      const chrome = [...this.contentEl.doc.querySelectorAll(".mobile-navbar, .mobile-toolbar")];
       if (header) chrome.push(header);
       for (const el of chrome) {
         if (!observed.has(el)) { observed.add(el); ro.observe(el); chromeAttributes.observe(el, { attributes: true, attributeFilter: ["class", "style"] }); }
@@ -157,18 +159,19 @@ export class WayfarerView extends ItemView {
     observeChrome();
     // Host navigation can be hidden, shown, moved or inserted without resizing the pane.
     const hostChanges = new MutationObserver(observeChrome);
-    hostChanges.observe(document.body, { attributes: true, attributeFilter: ["class", "style"], childList: true });
+    hostChanges.observe(this.contentEl.doc.body, { attributes: true, attributeFilter: ["class", "style"], childList: true });
     const chromeTree = new MutationObserver((records) => {
-      if (records.some((record) => [...record.addedNodes, ...record.removedNodes].some((node) => node instanceof Element && (node.matches(".mobile-navbar, .mobile-toolbar, .view-header") || node.querySelector(".mobile-navbar, .mobile-toolbar, .view-header"))))) observeChrome();
+      if (records.some((record) => [...record.addedNodes, ...record.removedNodes].some((node) => node.instanceOf(Element) && (node.matches(".mobile-navbar, .mobile-toolbar, .view-header") || node.querySelector(".mobile-navbar, .mobile-toolbar, .view-header"))))) observeChrome();
     });
-    chromeTree.observe(document.body, { childList: true, subtree: true });
+    chromeTree.observe(this.contentEl.doc.body, { childList: true, subtree: true });
     this.register(() => { hostChanges.disconnect(); chromeTree.disconnect(); });
     this.registerEvent(this.app.workspace.on("layout-change", observeChrome));
     this.registerDomEvent(document, "transitionend", (event) => {
-      if (event.target instanceof HTMLElement && event.target.matches(".mobile-navbar, .mobile-toolbar, .view-header")) this.updateChromeClearance();
+      const target = event.target as HTMLElement | null;
+      if (target?.instanceOf(HTMLElement) && target.matches(".mobile-navbar, .mobile-toolbar, .view-header")) this.updateChromeClearance();
     });
     this.registerDomEvent(window, "resize", observeChrome);
-    const viewport = window.visualViewport;
+    const viewport = this.contentEl.win.visualViewport;
     if (viewport) {
       viewport.addEventListener("resize", observeChrome);
       viewport.addEventListener("scroll", observeChrome);
@@ -180,19 +183,18 @@ export class WayfarerView extends ItemView {
     this.registerDomEvent(this.mapEl, "click", (evt) => {
       const t = evt.target as HTMLElement;
       const a = t.closest?.("a.wf-ext");
-      if (a instanceof HTMLAnchorElement) {
+      if (a?.instanceOf(HTMLAnchorElement)) {
         evt.preventDefault();
-        window.open(a.href);
+        this.contentEl.win.open(a.href);
         return;
       }
     });
 
-    this.plugin.attachView(this);
+    this.plugin.refresh();
   }
 
   async onClose(): Promise<void> {
-    window.clearTimeout(this.hoverClose);
-    this.plugin.detachView(this);
+    this.contentEl.win.clearTimeout(this.hoverClose);
     this.cameraRevision++;
     this.map?.remove();
     this.map = null;
@@ -239,15 +241,15 @@ export class WayfarerView extends ItemView {
     if (!this.isNarrow()) return;
     const root = this.contentEl.getBoundingClientRect();
     const visible = (el: Element) => {
-      const style = getComputedStyle(el);
+      const style = this.contentEl.win.getComputedStyle(el);
       const rect = el.getBoundingClientRect();
       return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) > 0 && rect.width > 0 && rect.height > 0;
     };
     const header = this.contentEl.parentElement?.querySelector(".view-header");
-    const footers = [...document.querySelectorAll(".mobile-navbar, .mobile-toolbar")].filter(visible);
-    const vv = window.visualViewport;
-    const viewport = { top: vv?.offsetTop ?? 0, left: vv?.offsetLeft ?? 0, bottom: (vv?.offsetTop ?? 0) + (vv?.height ?? window.innerHeight), right: (vv?.offsetLeft ?? 0) + (vv?.width ?? window.innerWidth) };
-    const safeBottom = parseFloat(getComputedStyle(document.body).getPropertyValue("--safe-area-inset-bottom")) || 0;
+    const footers = [...this.contentEl.doc.querySelectorAll(".mobile-navbar, .mobile-toolbar")].filter(visible);
+    const vv = this.contentEl.win.visualViewport;
+    const viewport = { top: vv?.offsetTop ?? 0, left: vv?.offsetLeft ?? 0, bottom: (vv?.offsetTop ?? 0) + (vv?.height ?? this.contentEl.win.innerHeight), right: (vv?.offsetLeft ?? 0) + (vv?.width ?? this.contentEl.win.innerWidth) };
+    const safeBottom = parseFloat(this.contentEl.win.getComputedStyle(this.contentEl.doc.body).getPropertyValue("--safe-area-inset-bottom")) || 0;
     const clearance = mapClearance(root, header && visible(header) ? [header.getBoundingClientRect()] : [], footers.map((el) => el.getBoundingClientRect()), viewport, safeBottom);
     const set = (key: string, value: number) => {
       const px = `${Math.ceil(value)}px`;
@@ -474,15 +476,15 @@ export class WayfarerView extends ItemView {
       });
       // Hovering a pin shows its card; it goes away with the pointer unless the stop is the focused one.
       marker.on("mouseover", () => {
-        if (Platform.isMobile || !window.matchMedia("(any-hover: hover)").matches || this.flying) return;
-        window.clearTimeout(this.hoverClose);
+        if (Platform.isMobile || !this.contentEl.win.matchMedia("(any-hover: hover)").matches || this.flying) return;
+        this.contentEl.win.clearTimeout(this.hoverClose);
         if (!marker.isPopupOpen()) this.openPopup(stop);
       });
       marker.on("mouseout", () => this.closeHoverPopup(stop, marker));
       marker.on("popupopen", (e) => {
         const el = e.popup.getElement();
         if (!el) return;
-        el.onmouseenter = () => window.clearTimeout(this.hoverClose);
+        el.onmouseenter = () => this.contentEl.win.clearTimeout(this.hoverClose);
         el.onmouseleave = () => this.closeHoverPopup(stop, marker);
       });
       marker.addTo(this.layer);
@@ -681,7 +683,7 @@ export class WayfarerView extends ItemView {
     back.disabled = !previous;
     back.onclick = () => { if (previous) this.browseStop(previous); };
     const nav = actions.createEl("button", { cls: "wf-journey-nav", text: t("journey_nav_short"), attr: { "aria-label": t("journey_nav_start"), title: t("journey_nav_start") } });
-    nav.onclick = () => window.open(navigateUrl(stop, stop.transport));
+    nav.onclick = () => this.contentEl.win.open(navigateUrl(stop, stop.transport));
     const next = nextStop(it, stop);
     const advance = actions.createEl("button", { cls: "wf-journey-advance", text: t("journey_next") + " →" });
     advance.disabled = !next;
@@ -758,7 +760,7 @@ export class WayfarerView extends ItemView {
           void this.jumpTo(stop, false);
           this.openPopup(stop);
         };
-        if (stop === this.focused) window.setTimeout(() => card.scrollIntoView({ block: "nearest", behavior: "smooth" }), 0);
+        if (stop === this.focused) this.contentEl.win.setTimeout(() => card.scrollIntoView({ block: "nearest", behavior: "smooth" }), 0);
       });
     }
   }
@@ -813,8 +815,8 @@ export class WayfarerView extends ItemView {
 
   /** Closes a popup that was only open because the pointer was on the pin. */
   private closeHoverPopup(stop: Stop, marker: L.Marker): void {
-    window.clearTimeout(this.hoverClose);
-    this.hoverClose = window.setTimeout(() => {
+    this.contentEl.win.clearTimeout(this.hoverClose);
+    this.hoverClose = this.contentEl.win.setTimeout(() => {
       if (stop === this.focused || !marker.isPopupOpen()) return;
       marker.closePopup();
       // Hovering another pin had displaced the chosen stop's card; bring it back.
@@ -843,7 +845,7 @@ export class WayfarerView extends ItemView {
   }
 
   private bottomInset(): number {
-    if (!this.journeyEl.offsetHeight) return parseFloat(getComputedStyle(this.contentEl).getPropertyValue("--wf-controls-bottom")) || 24;
+    if (!this.journeyEl.offsetHeight) return parseFloat(this.contentEl.win.getComputedStyle(this.contentEl).getPropertyValue("--wf-controls-bottom")) || 24;
     return Math.max(0, this.mapEl.getBoundingClientRect().bottom - this.journeyEl.getBoundingClientRect().top);
   }
 
@@ -860,8 +862,8 @@ export class WayfarerView extends ItemView {
     const visible = this.map.getBounds();
     const covered = this.map.containerPointToLatLng([this.leftInset(), 0]);
     const seen = L.latLngBounds(L.latLng(visible.getSouth(), covered.lng), visible.getNorthEast()).pad(-0.2);
-    if (seen.contains(target) && this.map.getZoom() >= 13) this.map.panTo(this.centreFor(target, this.map.getZoom()), { animate: !window.matchMedia("(prefers-reduced-motion: reduce)").matches, duration: 0.4 });
-    else this.map.flyTo(this.centreFor(target, zoom), zoom, { animate: !window.matchMedia("(prefers-reduced-motion: reduce)").matches, duration: 0.6 });
+    if (seen.contains(target) && this.map.getZoom() >= 13) this.map.panTo(this.centreFor(target, this.map.getZoom()), { animate: !this.contentEl.win.matchMedia("(prefers-reduced-motion: reduce)").matches, duration: 0.4 });
+    else this.map.flyTo(this.centreFor(target, zoom), zoom, { animate: !this.contentEl.win.matchMedia("(prefers-reduced-motion: reduce)").matches, duration: 0.6 });
   }
 
   /**
@@ -875,7 +877,7 @@ export class WayfarerView extends ItemView {
     this.map.invalidateSize(false);
     const size = this.map.getSize();
     if ((size.x === 0 || size.y === 0) && attempt < 20) {
-      window.setTimeout(() => this.fitAll(stops, attempt + 1, revision), 50);
+      this.contentEl.win.setTimeout(() => this.fitAll(stops, attempt + 1, revision), 50);
       return;
     }
     this.flying = true;
@@ -950,7 +952,7 @@ function signatureOf(it: Itinerary | null): string {
   if (!it) return "";
   let d = digests.get(it);
   if (d === undefined) {
-    d = JSON.stringify([it.days.map((d) => [d.headingLine, d.title, d.stops.map((s) => [s.line, s.from, s.name, s.lat, s.lng, s.transport, s.time, s.emoji, s.image, s.note, s.notes, s.meta])])]);
+    d = JSON.stringify([it.days.map((d) => [d.headingLine, d.title, d.stops.map((s) => [s.line, s.from, s.name, s.url, s.lat, s.lng, s.transport, s.time, s.emoji, s.image, s.note, s.notes, s.meta])])]);
     digests.set(it, d);
   }
   return d;

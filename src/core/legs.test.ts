@@ -40,16 +40,16 @@ describe("legs", () => {
   it("uses a saved route only for the same previous stop and mode", () => {
     const saved = parseItinerary(`## 2026-09-17
 1. [湯滝](geo:36.7938,139.4316)
-2. [赤沼](geo:36.7754,139.4432) %%wf:{"via":"bus","leg":{"from":"36.7938,139.4316","via":"bus","s":900,"m":4100,"line":"日光 2 號"}}%%
+2. [赤沼](geo:36.7754,139.4432) %%wf:{"via":"bus","leg":{"from":"36.7938,139.4316","to":"36.7754,139.4432","departure":"test-departure","via":"bus","s":900,"m":4100,"line":"日光 2 號"}}%%
 3. [中禪寺湖](geo:36.7345,139.4823) %%wf:{"via":"bus","leg":{"from":"0,0","via":"bus","s":900,"m":4100}}%%
 `).stops;
-    const ok = bareLeg(saved[0], saved[1]);
+    const ok = bareLeg(saved[0], saved[1], "test-departure");
     expect(ok).toMatchObject({ routed: true, durationS: 900, distanceM: 4100, summary: "日光 2 號", source: "google" });
     const stale = bareLeg(saved[1], saved[2]);
     expect(stale.routed).toBe(false);
     expect(stale.durationS).toBeUndefined();
-    expect(legMetaFor(saved[0], { durationS: 899.6, distanceM: 4100.4, summary: "X" }, "bus")).toEqual({ from: coordKey(saved[0]), via: "bus", s: 900, m: 4100, line: "X" });
-    expect(legMetaFor(saved[0], { durationS: undefined, distanceM: 1 }, "bus")).toBeNull();
+    expect(legMetaFor(saved[0], saved[1], { durationS: 899.6, distanceM: 4100.4, summary: "X" }, "bus")).toEqual({ from: coordKey(saved[0]), to: coordKey(saved[1]), via: "bus", s: 900, m: 4100, line: "X" });
+    expect(legMetaFor(saved[0], saved[1], { durationS: undefined, distanceM: 1 }, "bus")).toBeNull();
   });
   it("decodes a polyline", () => {
     const pts = decodePolyline("_p~iF~ps|U_ulLnnqC_mqNvxq`@");
@@ -83,12 +83,36 @@ describe("saved route shape", () => {
   it("saves the shape on the leg and a later read draws it", () => {
     const from = { name: "A", lat: 35.0, lng: 139.0, line: 1, from: 0, to: 1, beforeFrom: 0, index: 0, dayIndex: 0, category: "other", note: "", notes: [] } as unknown as import("./itinerary").Stop;
     const geometry: [number, number][] = [[35.0, 139.0], [35.01, 139.02], [35.02, 139.05]];
-    const meta = legMetaFor(from, { durationS: 600, distanceM: 5000, geometry }, "bus");
+    const dest = { ...from, lat: 35.02, lng: 139.05 };
+    const meta = legMetaFor(from, dest, { durationS: 600, distanceM: 5000, geometry }, "bus", "departure");
     expect(meta?.p).toBeTruthy();
     const to = { ...from, name: "B", lat: 35.02, lng: 139.05, line: 2, transport: "bus", meta: { leg: meta } } as unknown as import("./itinerary").Stop;
-    const leg = bareLeg(from, to);
+    const leg = bareLeg(from, to, "departure");
     expect(leg.routed).toBe(true);
     expect(leg.geometry.length).toBe(3);
     expect(leg.geometry[1][0]).toBeCloseTo(35.01, 4);
+  });
+});
+
+
+describe("saved route identity", () => {
+  const [from, to] = parseItinerary("## 2027-01-01\n- [A](geo:35,139)\n- 🚆 [B](geo:35.1,139.1)").stops;
+  const meta = legMetaFor(from, to, { durationS: 600, distanceM: 10000 }, "train", "morning");
+  const saved = { ...to, meta: { leg: meta! } };
+  it("invalidates changed destination, origin, mode and departure", () => {
+    expect(bareLeg(from, saved, "morning").routed).toBe(true);
+    expect(bareLeg(from, { ...saved, lat: 36 }, "morning").routed).toBe(false);
+    expect(bareLeg({ ...from, lng: 140 }, saved, "morning").routed).toBe(false);
+    expect(bareLeg(from, { ...saved, transport: "walk" }, "morning").routed).toBe(false);
+    expect(bareLeg(from, saved, "evening").routed).toBe(false);
+    expect(bareLeg(from, saved).routed).toBe(false);
+  });
+  it("reads modern identity through the note serializer", () => {
+    const parsed = parseItinerary(`## 2027-01-01\n- [A](geo:35,139)\n- 🚆 [B](geo:35.1,139.1) %%wf:${JSON.stringify({ leg: meta })}%%`).stops;
+    expect(bareLeg(parsed[0], parsed[1], "morning").routed).toBe(true);
+  });
+  it("does not trust legacy routes without a destination", () => {
+    const legacy = { ...saved, meta: { leg: { ...meta!, to: undefined } } };
+    expect(bareLeg(from, legacy, "morning").routed).toBe(false);
   });
 });
