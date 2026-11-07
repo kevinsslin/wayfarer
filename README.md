@@ -101,7 +101,7 @@ Optional. Without a key you get pins from the link's coordinates and straight-li
 3. Create an API key and restrict it to those two APIs.
 4. Paste it in **Settings → Wayfarer → Google API key** and press **Test key**.
 
-Wayfarer reuses saved details and routes to reduce requests. Changing stops or transport, fetching missing details and loading photos can make new requests. Google requires billing for these APIs; consult [current Google Maps Platform pricing](https://developers.google.com/maps/billing-and-pricing/pricing) for allowances and rates. Budget alerts notify you of spending; they do not cap it.
+Wayfarer reuses saved details and routes to reduce requests. A saved route must match both endpoints, the transport mode and, for transit, the departure date and time. Older routes without this information show straight-line distance until refreshed with a key. Route requests share a three-request limit and pause after a refusal. Changing stops or transport, fetching missing details and loading photos can make new requests. Google requires billing for these APIs; consult [current Google Maps Platform pricing](https://developers.google.com/maps/billing-and-pricing/pricing) for allowances and rates. Budget alerts notify you of spending; they do not cap it.
 
 ## Installation
 

@@ -36,12 +36,14 @@ export function hoursForWeekday(hours: string[] | undefined, weekday: number): s
 
 /** Parses "Monday: 9:00 AM – 5:00 PM", "星期一: 09:00 – 17:00, 18:00 – 22:00", "Closed", "Open 24 hours". */
 export function parseDayHours(desc: string): DayHours {
-  const body = desc.replace(/^[^:：]*[:：]\s*/, "").trim();
+  const body = desc.replace(/^[^:：]*[:：]\s*/, "").trim()
+    // Google uses prefix day periods in Chinese, suffix periods in English.
+    .replace(/(上午|下午)\s*(\d{1,2}(?::\d{2})?)/g, "$2 $1");
   const lower = body.toLowerCase();
   if (!body || /closed|休息|休業|定休|公休|休み/.test(lower)) return { closed: true, allDay: false, ranges: [] };
   if (/24\s*hours|24\s*小時|24\s*時間|營業 24/.test(lower)) return { closed: false, allDay: true, ranges: [[0, 1440]] };
   const ranges: [number, number][] = [];
-  const re = /(\d{1,2})(?::(\d{2}))?\s*(am|pm|上午|下午)?\s*[–—-]\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|上午|下午)?/gi;
+  const re = /(\d{1,2})(?::(\d{2}))?\s*(am|pm|上午|下午)?\s*(?:[–—-]|至|到)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|上午|下午)?/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(body))) {
     const open = toMin(m[1], m[2], m[3] ?? m[6]);

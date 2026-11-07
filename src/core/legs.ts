@@ -1,4 +1,4 @@
-import type { Transport } from "./category";
+import { TRANSIT_MODES, type Transport } from "./category";
 import { t } from "./i18n";
 import type { LegMeta, Stop } from "./itinerary";
 
@@ -36,13 +36,14 @@ export function haversineM(a: { lat: number; lng: number }, b: { lat: number; ln
 
 /**
  * A leg with what the note alone knows: the mode, the straight-line distance,
- * and, when the stop carries a route saved for this same previous stop and
- * mode, that route's duration, distance and line names.
+ * and, when the saved endpoints, mode and transit departure still match,
+ * that route's duration, distance and line names. Legacy routes without a
+ * destination cannot be validated and are refreshed by the router.
  */
-export function bareLeg(from: Stop, to: Stop): Leg {
+export function bareLeg(from: Stop, to: Stop, departure?: string): Leg {
   const straight: [number, number][] = [[from.lat, from.lng], [to.lat, shortWayLng(from.lng, to.lng)]];
   const saved = to.meta?.leg;
-  if (saved && to.transport && saved.via === to.transport && saved.from === coordKey(from)) {
+  if (saved && to.transport && saved.via === to.transport && saved.from === coordKey(from) && saved.to === coordKey(to) && (!TRANSIT_MODES.has(to.transport) || (departure !== undefined && saved.departure === departure))) {
     const shape = saved.p ? decodePolyline(saved.p) : [];
     return finishLeg({ from, to, mode: to.transport, distanceM: saved.m, durationS: saved.s, summary: saved.line, routed: true, source: "google", geometry: shape.length >= 2 ? shape : straight });
   }
@@ -55,9 +56,10 @@ export function coordKey(p: { lat: number; lng: number }): string {
 }
 
 /** What to save on the destination stop after a route came back. The shape is kept to at most `maxPoints` points. */
-export function legMetaFor(from: Stop, leg: Pick<Leg, "durationS" | "distanceM" | "summary"> & { geometry?: [number, number][] }, via: NonNullable<Stop["transport"]>, maxPoints = 40): LegMeta | null {
+export function legMetaFor(from: Stop, to: Stop, leg: Pick<Leg, "durationS" | "distanceM" | "summary"> & { geometry?: [number, number][] }, via: NonNullable<Stop["transport"]>, departure?: string, maxPoints = 40): LegMeta | null {
   if (leg.durationS === undefined) return null;
-  const out: LegMeta = { from: coordKey(from), via, s: Math.round(leg.durationS), m: Math.round(leg.distanceM) };
+  const out: LegMeta = { from: coordKey(from), to: coordKey(to), via, s: Math.round(leg.durationS), m: Math.round(leg.distanceM) };
+  if (TRANSIT_MODES.has(via)) out.departure = departure;
   if (leg.summary) out.line = leg.summary;
   if (leg.geometry && leg.geometry.length >= 2) out.p = encodePolyline(simplifyLine(leg.geometry, maxPoints));
   return out;
@@ -148,10 +150,10 @@ export function minutesOf(time: string | undefined): number | null {
   return Number(m[1]) * 60 + Number(m[2]);
 }
 
-/** Cache key for a leg; mode and endpoints only, rounded so tiny edits reuse the answer. */
-export function legKey(from: Stop, to: Stop, mode: Transport): string {
+/** Route identity includes transit departure context, as well as mode and endpoints. */
+export function legKey(from: Stop, to: Stop, mode: Transport, departure?: string): string {
   const r = (n: number) => n.toFixed(4);
-  return `${mode}:${r(from.lat)},${r(from.lng)}>${r(to.lat)},${r(to.lng)}`;
+  return `${mode}:${r(from.lat)},${r(from.lng)}>${r(to.lat)},${r(to.lng)}${TRANSIT_MODES.has(mode) ? `:${departure ?? "unspecified"}` : ""}`;
 }
 
 export function formatDuration(s: number): string {

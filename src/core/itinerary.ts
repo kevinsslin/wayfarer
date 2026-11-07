@@ -27,9 +27,9 @@ export interface PlaceMeta {
   via?: Transport;
   /**
    * The route Google returned for the leg into this stop, kept so companions
-   * without a key see the same numbers. `from` is the previous stop's
-   * rounded coordinates: after a reorder it no longer matches and the entry
-   * is ignored and refetched.
+   * without a key see the same numbers. Endpoints, mode and transit departure
+   * context must still match after edits; incomplete legacy identities are
+   * ignored until they can be refreshed.
    */
   leg?: LegMeta;
 }
@@ -37,6 +37,9 @@ export interface PlaceMeta {
 export interface LegMeta {
   from: string;
   via: Transport;
+  /** Both endpoints and transit departure context validate this saved result. */
+  to?: string;
+  departure?: string;
   /** Duration in seconds and distance in metres. */
   s: number;
   m: number;
@@ -518,6 +521,8 @@ export function parseMeta(json: string): PlaceMeta | undefined {
     const l = leg as Record<string, unknown>;
     if (typeof l.from === "string" && typeof l.via === "string" && l.via in TRANSPORT_EMOJI && typeof l.s === "number" && typeof l.m === "number") {
       const saved: LegMeta = { from: l.from, via: l.via as Transport, s: l.s, m: l.m };
+      if (typeof l.to === "string") saved.to = l.to;
+      if (typeof l.departure === "string") saved.departure = l.departure;
       if (typeof l.line === "string") saved.line = l.line;
       if (typeof l.p === "string") saved.p = l.p;
       out.leg = saved;

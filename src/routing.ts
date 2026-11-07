@@ -8,23 +8,32 @@ import type { WayfarerSettings } from "./settings";
 /**
  * Turns a day's stops into legs. Answers synchronously with what is known
  * (distance, and cached routes), then asks Google Routes for legs whose mode
- * the user has chosen and calls `onUpdate` once per batch so the pane
+ * the user has chosen and calls `onUpdate` as results arrive so the pane
  * redraws. Without a Google key nothing is fetched: a leg is its distance.
  */
+interface RouteRequest {
+  from: Stop;
+  to: Stop;
+  mode: Transport;
+  key: string;
+  departure?: Date;
+  context?: string;
+  file: string;
+  apiKey: string;
+  languageCode: string;
+}
+
 export class LegRouter {
-  /** `null` remembers that Google had no route for the leg, so it is not asked again this session. */
   private cache = new Map<string, Pick<Leg, "distanceM" | "durationS" | "geometry" | "summary" | "source"> | null>();
+  /** Includes queued requests, so repeated legs and redraws cannot enqueue duplicates. */
   private inflight = new Set<string>();
-  /** After a refusal or a network failure nothing is asked until this time, so a bad key does not cost a request per redraw. */
+  private queue: RouteRequest[] = [];
+  private running = 0;
+  private disposed = false;
   private pausedUntil = 0;
   private pausedKey = "";
-  /** Cache hits already offered to a note, so a stop whose line cannot take the write is not retried on every redraw. */
   private written = new Set<string>();
 
-  /**
-   * `onRouted` receives the destination stop and what to save on it, so the
-   * numbers travel with the note.
-   */
   constructor(
     private settings: () => WayfarerSettings,
     private onUpdate: () => void,
@@ -32,84 +41,109 @@ export class LegRouter {
     private onError?: (e: GoogleApiError) => void,
   ) {}
 
-  /** `file` is the note the day came from, so a result that arrives after the user moved on is not written elsewhere. */
   legsFor(day: Day, dayDate: Date | null, file = ""): Leg[] {
+    const settings = this.settings();
     const legs: Leg[] = [];
-    const missing: Array<{ from: Stop; to: Stop; mode: Transport; key: string; departure?: Date; file: string }> = [];
     for (let i = 1; i < day.stops.length; i++) {
       const from = day.stops[i - 1];
       const to = day.stops[i];
-      const leg = bareLeg(from, to);
-      // A leg already saved on the stop is not asked again: the numbers are there, and every call counts against the key.
-      // A saved leg that already carries its shape is complete; one saved without a shape (older notes) is asked once more.
-      if ((leg.routed && to.meta?.leg?.p) || !leg.mode || !routable(leg.mode) || !this.settings().googleApiKey) {
+      const context = transitContext(dayDate, from, to);
+      const leg = bareLeg(from, to, context);
+      if (this.disposed || (leg.routed && to.meta?.leg?.p) || !leg.mode || !routable(leg.mode) || !settings.googleApiKey) {
         legs.push(leg);
         continue;
       }
-      const key = legKey(from, to, leg.mode);
+      const key = `${settings.languageCode}:${legKey(from, to, leg.mode, context)}`;
       const hit = this.cache.get(key);
       if (hit) {
         legs.push(finishLeg({ ...leg, ...hit, routed: true }));
-        // A route known from another note or an earlier stop is worth saving here too, once.
-        const meta = legMetaFor(from, hit, leg.mode);
-        if (meta && this.onRouted && !sameLeg(to.meta?.leg, meta) && !this.written.has(`${file}:${to.line}:${key}`)) {
-          this.written.add(`${file}:${to.line}:${key}`);
+        const meta = legMetaFor(from, to, hit, leg.mode, context);
+        const writeKey = `${file}:${to.line}:${to.from}:${key}`;
+        if (meta && this.onRouted && !sameLeg(to.meta?.leg, meta) && !this.written.has(writeKey)) {
+          this.written.add(writeKey);
           this.onRouted(to, meta, file);
         }
       } else {
         legs.push(leg);
-        if (hit === undefined && !this.inflight.has(key)) missing.push({ from, to, mode: leg.mode, key, departure: departureFor(dayDate, from, to), file });
+        if (hit === undefined && !this.inflight.has(key) && !this.paused()) {
+          this.inflight.add(key);
+          this.queue.push({ from, to, mode: leg.mode, key, departure: departureFor(dayDate, from, to), context, file, apiKey: settings.googleApiKey, languageCode: settings.languageCode });
+        }
       }
     }
-    if (missing.length && !this.paused()) void this.fetch(missing);
+    this.drain();
     return legs;
+  }
+
+  /** requestUrl cannot abort an active request; discard its result and cancel queued work. */
+  dispose(): void {
+    this.disposed = true;
+    this.dropQueue();
+  }
+
+  private dropQueue(): void {
+    for (const item of this.queue) this.inflight.delete(item.key);
+    this.queue = [];
   }
 
   private paused(): boolean {
     const key = this.settings().googleApiKey;
-    // A new key lifts the pause at once.
     if (key !== this.pausedKey) { this.pausedKey = key; this.pausedUntil = 0; }
     return Date.now() < this.pausedUntil;
   }
 
-  private pause(ms: number): void {
-    this.pausedKey = this.settings().googleApiKey;
-    this.pausedUntil = Math.max(this.pausedUntil, Date.now() + ms);
+  private drain(): void {
+    if (this.disposed || this.paused()) { this.dropQueue(); return; }
+    // One queue per plugin, shared by every day and map view.
+    while (this.running < 3 && this.queue.length) {
+      const item = this.queue.shift()!;
+      if (!this.currentSettings(item)) { this.inflight.delete(item.key); continue; }
+      this.running++;
+      void this.fetch(item);
+    }
   }
 
-  private async fetch(items: Array<{ from: Stop; to: Stop; mode: Transport; key: string; departure?: Date; file: string }>): Promise<void> {
-    for (const it of items) this.inflight.add(it.key);
-    let changed = false;
-    await Promise.all(
-      items.map(async (it) => {
-        try {
-          const s = this.settings();
-          const r = await googleRoute(s.googleApiKey, s.languageCode, it.from, it.to, googleMode(it.mode), it.departure);
-          this.cache.set(it.key, r ? { ...r, source: "google" } : null);
-          if (r) {
-            changed = true;
-            const meta = legMetaFor(it.from, r, it.mode);
-            const saved = it.to.meta?.leg;
-            if (meta && this.onRouted && !sameLeg(saved, meta)) this.onRouted(it.to, meta, it.file);
-          }
-        } catch (e) {
-          // The leg keeps its distance only. A refusal is told once and stops further asking for a while;
-          // a network failure pauses briefly so an offline session does not retry on every redraw.
-          if (e instanceof GoogleApiError) {
-            this.pause(e.status === 429 ? 60_000 : 10 * 60_000);
-            this.onError?.(e);
-          } else this.pause(30_000);
-        } finally {
-          this.inflight.delete(it.key);
-        }
-      }),
-    );
-    if (changed) this.onUpdate();
+  private currentSettings(item: RouteRequest): boolean {
+    const settings = this.settings();
+    return item.apiKey === settings.googleApiKey && item.languageCode === settings.languageCode;
+  }
+
+  private async fetch(item: RouteRequest): Promise<void> {
+    try {
+      const r = await googleRoute(item.apiKey, item.languageCode, item.from, item.to, googleMode(item.mode), item.departure);
+      if (this.disposed || !this.currentSettings(item)) return;
+      this.cache.set(item.key, r ? { ...r, source: "google" } : null);
+      if (r) {
+        const meta = legMetaFor(item.from, item.to, r, item.mode, item.context);
+        if (meta && !sameLeg(item.to.meta?.leg, meta)) this.onRouted?.(item.to, meta, item.file);
+        this.onUpdate();
+      }
+    } catch (e) {
+      if (this.disposed || !this.currentSettings(item)) return;
+      this.pausedKey = item.apiKey;
+      this.pausedUntil = Date.now() + (e instanceof GoogleApiError ? e.status === 429 ? 60_000 : 10 * 60_000 : 30_000);
+      this.dropQueue();
+      if (e instanceof GoogleApiError) this.onError?.(e);
+    } finally {
+      this.inflight.delete(item.key);
+      this.running--;
+      this.drain();
+      // A settings refresh may have skipped an identity that was still in flight.
+      if (!this.disposed && !this.currentSettings(item)) this.onUpdate();
+    }
   }
 }
 
 function sameLeg(a: LegMeta | undefined, b: LegMeta): boolean {
-  return !!a && a.from === b.from && a.via === b.via && a.s === b.s && a.m === b.m && a.line === b.line && a.p === b.p;
+  return !!a && a.from === b.from && a.to === b.to && a.departure === b.departure && a.via === b.via && a.s === b.s && a.m === b.m && a.line === b.line && a.p === b.p;
+}
+
+/** An undated or untimed transit plan must not borrow another plan's timetable. */
+export function transitContext(dayDate: Date | null, from: Stop, to?: Stop): string {
+  const departure = departureFor(dayDate, from, to);
+  if (departure) return departure.toISOString();
+  const date = dayDate ? `${dayDate.getFullYear()}-${dayDate.getMonth() + 1}-${dayDate.getDate()}` : "undated";
+  return `${date}:${from.time ?? "untimed"}`;
 }
 
 /** Flights and boats have no router; everything else goes to Google Routes. */

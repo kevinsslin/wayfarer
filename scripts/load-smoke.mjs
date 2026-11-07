@@ -150,7 +150,8 @@ await plugin.resolveDeps().places.searchText("Tokyo Station");
 assert(JSON.parse(googleRequests.at(-1).body).languageCode === "ja", "Places search receives resolved language");
 await plugin.resolveDeps().places.details("smoke-place");
 assert(new URL(googleRequests.at(-1).url).searchParams.get("languageCode") === "ja", "Places details receive resolved language");
-await plugin.router.fetch([{from:{lat:35.68,lng:139.76},to:{lat:35.69,lng:139.77},mode:"walk",key:"smoke",file:""}]);
+plugin.router.legsFor({ stops: [{lat:35.68,lng:139.76}, {lat:35.69,lng:139.77,transport:"walk"}] }, null);
+await new Promise((resolve) => setImmediate(resolve));
 assert(JSON.parse(googleRequests.at(-1).body).languageCode === "ja", "Routes receive resolved language");
 plugin.loadData = async () => ({languageCode:"zh-TW", uiLanguage:"auto"});
 await plugin.loadSettings();
@@ -159,5 +160,101 @@ await plugin.settingTabs[0].setControlValue("languageCode", "auto");
 assert(plugin.googleLanguageCode === "ja", "existing users can opt into automatic language");
 plugin.settings.uiLanguage = "en";
 assert(plugin.googleLanguageCode === "en", "explicit interface language overrides Obsidian");
+// Exercise the actual bundled plugin against a reused MarkdownView, as Obsidian
+// does when another file opens in the same pane. No Google network calls.
+plugin.settings.autoOpen = false;
+plugin.settings.googleApiKey = "smoke-key";
+const md = new obsidianStub.MarkdownView();
+let source = "";
+md.getMode = () => "preview";
+md.editor = {
+  getValue: () => source,
+  lineCount: () => source.split("\n").length,
+  getLine: (line) => source.split("\n")[line] ?? "",
+  getCursor: () => ({ line: 1, ch: 0 }),
+  replaceRange: (text, from, to) => {
+    const lines = source.split("\n");
+    lines[from.line] = lines[from.line].slice(0, from.ch) + text + lines[to.line].slice(to.ch);
+    source = lines.join("\n");
+  },
+};
+app.workspace.getActiveViewOfType = () => md;
+app.workspace.getLeavesOfType = (type) => type === "markdown" ? [{ view: md }] : [];
+const files = new Map();
+const openNote = (path, text) => {
+  if (!files.has(path)) files.set(path, Object.assign(new obsidianStub.TFile(), { path }));
+  md.file = files.get(path);
+  source = text;
+  plugin.refresh();
+};
+const writes = [];
+app.vault = { process: async (file, transform) => { writes.push(file.path); source = transform(source); } };
+const note = "## 2027-01-01\n- [Hotel](geo:35,139)";
+const details = { status: 200, json: { places: [{ id: "smoke-place", displayName: { text: "Hotel" }, location: { latitude: 35, longitude: 139 }, rating: 4.5 }] } };
+for (const mode of ["preview", "source"]) {
+  md.getMode = () => mode;
+  let resolveRequest;
+  obsidianStub.requestUrl = () => new Promise((resolve) => { resolveRequest = resolve; });
+  openNote("A.md", note);
+  const pending = plugin.fetchDetails();
+  openNote("B.md", note);
+  resolveRequest(details);
+  await pending;
+  assert(source === note, `${mode}: pending details cannot edit a different note`);
+  openNote("A.md", note);
+  const normal = plugin.fetchDetails();
+  resolveRequest(details);
+  await normal;
+  assert(source.includes('"placeId":"smoke-place"'), `${mode}: details still save in the original note`);
+}
+
+// File identity is checked again inside vault.process, which may run later.
+md.getMode = () => "preview";
+openNote("A.md", note);
+let processLater;
+app.vault.process = (file, transform) => new Promise((resolve) => {
+  processLater = () => { assert(transform(note) === note, "queued file write is discarded after switching"); resolve(); };
+});
+const queued = plugin.rewriteLine(md, 1, (line) => line + " SHOULD NOT WRITE");
+openNote("B.md", note);
+processLater();
+await queued;
+
+for (const bulk of [false, true]) {
+  let resolveRequest;
+  obsidianStub.requestUrl = () => new Promise((resolve) => { resolveRequest = resolve; });
+  const url = "https://www.google.com/maps/place/Hotel/@35,139,17z";
+  openNote("A.md", "## 2027-01-01\n- " + url);
+  const pending = bulk ? plugin.convertAll(md.editor) : plugin.convert(md.editor, 1, url);
+  openNote("B.md", "## 2027-01-01\n- " + url);
+  resolveRequest(details);
+  await pending;
+  assert(source.includes(url), `${bulk ? "bulk" : "single"} conversion cannot edit the replacement note`);
+}
+
+// A route result must still belong to the live departure and destination.
+md.getMode = () => "source";
+const routeNote = "## 2027-01-01\n- 08:00 [A](geo:35,139)\n- 🚆 [B](geo:35.1,139.1)";
+const savedLeg = { from: "35.0000,139.0000", to: "35.1000,139.1000", via: "train", s: 600, m: 10000, departure: "2026-12-31T23:00:00.000Z" };
+for (const changed of [routeNote.replace("08:00", "20:00"), routeNote.replace("35.1,139.1", "36,140"), routeNote.replace("35,139", "34,138")]) {
+  openNote("A.md", routeNote);
+  const oldStop = plugin.current.itinerary.stops[1];
+  source = changed; // Also exercise edits before the editor-change debounce fires.
+  plugin.setStopMeta(oldStop, { leg: savedLeg }, true);
+  assert(source === changed, "stale route result is discarded after an itinerary edit");
+}
+openNote("A.md", routeNote);
+plugin.setStopMeta(plugin.current.itinerary.stops[1], { leg: savedLeg }, true);
+assert(source.includes('"departure"'), "a matching route still saves to the original stop");
+
+openNote("A.md", note);
+let resolveRequest;
+obsidianStub.requestUrl = () => new Promise((resolve) => { resolveRequest = resolve; });
+const unloading = plugin.fetchDetails();
 plugin.onunload();
+resolveRequest(details);
+await unloading;
+assert(source === note, "details arriving after unload cannot edit the note");
+assert(!writes.includes("B.md"), "no writes were directed to the replacement note");
+console.log("smoke: OK (async note identity, preview/source writes, conversion and unload)");
 console.log("smoke: OK (view, 6 commands, ribbon, settings tab, editor extension, post processor)");

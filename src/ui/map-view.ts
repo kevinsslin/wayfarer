@@ -159,7 +159,7 @@ export class WayfarerView extends ItemView {
     const hostChanges = new MutationObserver(observeChrome);
     hostChanges.observe(document.body, { attributes: true, attributeFilter: ["class", "style"], childList: true });
     const chromeTree = new MutationObserver((records) => {
-      if (records.some((record) => [...record.addedNodes, ...record.removedNodes].some((node) => node instanceof Element && (node.matches(".mobile-navbar, .mobile-toolbar, .view-header") || node.querySelector(".mobile-navbar, .mobile-toolbar, .view-header"))))) observeChrome();
+      if (records.some((record) => [...record.addedNodes, ...record.removedNodes].some((node) => node.instanceOf(Element) && (node.matches(".mobile-navbar, .mobile-toolbar, .view-header") || node.querySelector(".mobile-navbar, .mobile-toolbar, .view-header"))))) observeChrome();
     });
     chromeTree.observe(document.body, { childList: true, subtree: true });
     this.register(() => { hostChanges.disconnect(); chromeTree.disconnect(); });
