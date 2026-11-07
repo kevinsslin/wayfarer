@@ -7,6 +7,8 @@ import { isValidLatLng, parseGoogleMapsUrl, type ParsedMapsUrl } from "./gmaps-u
 import type { PlaceMeta } from "./itinerary";
 
 export interface ResolvedPlace {
+  /** Original link remains the note's clickable target after conversion. */
+  url?: string;
   name: string;
   lat: number;
   lng: number;
@@ -40,6 +42,12 @@ export async function resolveMapsUrl(input: string, deps: ResolveDeps): Promise<
     if (!parsed || parsed.isShort) throw new ResolveError("Could not expand the short link");
   }
 
+  const originalUrl = /^https?:\/\//i.test(input.trim()) ? input.trim() : `https://${input.trim()}`;
+  const keepLink = (place: ResolvedPlace): ResolvedPlace => {
+    const meta = parsed?.placeId && !place.meta?.placeId ? { ...place.meta, placeId: parsed.placeId } : place.meta;
+    return { ...place, ...(meta ? { meta } : {}), url: originalUrl };
+  };
+
   const urlPin = parsed.lat !== undefined && parsed.lng !== undefined && isValidLatLng(parsed.lat, parsed.lng) ? { lat: parsed.lat, lng: parsed.lng } : null;
 
   // The link is the source of truth. With a key, Google adds the canonical
@@ -50,17 +58,17 @@ export async function resolveMapsUrl(input: string, deps: ResolveDeps): Promise<
   if (deps.places) {
     if (parsed.placeId) {
       const p = await deps.places.details(parsed.placeId);
-      if (p) return p;
+      if (p) return keepLink(p);
     }
     const text = parsed.name ?? parsed.query;
     if (text) {
       const p = await deps.places.searchText(text, urlPin ?? undefined);
-      if (p && !urlPin) return p;
-      if (p && urlPin && distanceM(p, urlPin) <= (parsed.exact ? 300 : 3000)) return parsed.exact ? { ...p, ...urlPin } : p;
+      if (p && !urlPin) return keepLink(p);
+      if (p && urlPin && distanceM(p, urlPin) <= (parsed.exact ? 300 : 3000)) return keepLink(parsed.exact ? { ...p, ...urlPin } : p);
     }
   }
 
-  if (urlPin) return { name: nameFor(parsed), ...urlPin, source: "url" };
+  if (urlPin) return keepLink({ name: nameFor(parsed), ...urlPin, source: "url" });
 
   throw new ResolveError(
     parsed.placeId || parsed.ftid

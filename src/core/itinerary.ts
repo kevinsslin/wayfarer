@@ -1,15 +1,20 @@
 /**
  * Parses a note into days and stops.
  *
- * Stops are Map View compatible inline geolinks: `[Name](geo:lat,lng)`,
- * optionally followed by a `%%wf:{...}%%` metadata comment
- * that this plugin writes when it has place details.
+ * Stops keep their original Google Maps link with saved coordinates in a
+ * `%%wf:{...}%%` metadata comment. Map View compatible `[Name](geo:lat,lng)`
+ * links remain supported.
  *
  * Days are headings. Every stop belongs to the nearest heading above it; stops
  * before the first heading land in an unnamed group.
  */
 
 export interface PlaceMeta {
+  /** Coordinates for a stop whose visible link keeps its original Google Maps URL. */
+  lat?: number;
+  lng?: number;
+  /** Link these coordinates were resolved for; editing the href invalidates the pin. */
+  locationUrl?: string;
   /** Google rating, 1 to 5. */
   rating?: number;
   /** Weekday opening hours as printed by Google, e.g. "Monday: 9:00 AM – 5:00 PM". */
@@ -51,11 +56,13 @@ export interface LegMeta {
 
 export interface Stop {
   name: string;
+  /** Original Google Maps link, when retained during import. */
+  url?: string;
   lat: number;
   lng: number;
   /** Zero-based line in the note. */
   line: number;
-  /** Character offsets of the whole `[..](geo:..)` link within the line. */
+  /** Character offsets of the whole Markdown link within the line. */
   from: number;
   to: number;
   /** Where the text before this link starts on the line (line start, or the end of the previous link). */
@@ -115,9 +122,11 @@ export interface ParseOptions {
   maxHeadingLevel?: number;
 }
 
+import { isGoogleMapsUrl, isValidLatLng } from "./gmaps-url";
 import { TRANSPORT_EMOJI, firstEmoji, isTransportEmoji, pickCategory, transportEmoji, type Category, type Transport } from "./category";
 
-const GEO_LINK = /\[([^\]]*)\]\(geo:(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)(?:[^)]*)\)/g;
+const STOP_LINK = /\[([^\]]*)\]\((geo:[^)]*|https?:\/\/[^)\s]+)\)/g;
+const GEO_TARGET = /^geo:(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/;
 const META = /%%wf:(\{.*?\})%%/;
 const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 const FENCE = /^\s*(`{3,}|~{3,})/;
@@ -168,40 +177,26 @@ export function parseItinerary(markdown: string, opts: ParseOptions = {}): Itine
     if (noteBase !== null && indent > noteBase) continue;
     noteBase = null;
 
-    GEO_LINK.lastIndex = 0;
-    let m: RegExpExecArray | null;
     let prevEnd = 0;
     const time = TIME.exec(line)?.[1];
     let image: RegExpExecArray | null | undefined;
-    while ((m = GEO_LINK.exec(line))) {
-      const lat = Number(m[2]);
-      const lng = Number(m[3]);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    for (const link of stopLinks(line)) {
+      const { lat, lng, meta } = link;
       noteBase = indent;
-      // Looked for only on a line that is a stop; the lines under a plain bullet are not scanned.
       if (image === undefined) image = IMAGE.exec(line) ?? imageBelow(lines, i);
-      const rest = line.slice(m.index + m[0].length);
-      // metadata may sit anywhere after the link, before the next link
-      const nextLink = rest.search(/\[[^\]]*\]\(geo:/);
-      const scope = nextLink === -1 ? rest : rest.slice(0, nextLink);
-      let meta: PlaceMeta | undefined;
-      const mm = META.exec(scope);
-      if (mm) {
-        meta = parseMeta(mm[1]);
-      }
-      // The previous stop's comment sits in this span too; its text (an address with an emoji) is not ours to read.
-      const before = maskMeta(line.slice(prevEnd, m.index));
-      prevEnd = m.index + m[0].length;
-      const name = m[1] || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      const before = maskMeta(line.slice(prevEnd, link.from));
+      prevEnd = link.to;
+      const name = link.name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
       const emojiBefore = firstEmoji(before.replace(/\d{1,2}:\d{2}/, ""));
       current.stops.push({
         name,
+        url: link.url,
         lat,
         lng,
         line: i,
-        from: m.index,
-        beforeFrom: m.index - before.length,
-        to: m.index + m[0].length,
+        from: link.from,
+        beforeFrom: link.from - before.length,
+        to: link.to,
         meta,
         emoji: emojiBefore && !isTransportEmoji(emojiBefore) ? emojiBefore : undefined,
         category: pickCategory({ googleType: meta?.type, name }),
@@ -227,6 +222,45 @@ export function parseItinerary(markdown: string, opts: ParseOptions = {}): Itine
     d.stops.forEach((s) => (s.dayIndex = i));
   });
   return { days: withStops, stops: withStops.flatMap((d) => d.stops) };
+}
+
+export interface StopLink {
+  name: string;
+  lat: number;
+  lng: number;
+  url?: string;
+  from: number;
+  to: number;
+  meta?: PlaceMeta;
+  metaFrom?: number;
+  metaTo?: number;
+}
+
+/** Shared source spans for parsing, note edits and both rendered note surfaces. */
+export function stopLinks(line: string): StopLink[] {
+  const links = stopCandidates(line);
+  const out: StopLink[] = [];
+  for (let i = 0; i < links.length; i++) {
+    const m = links[i];
+    const from = m.index;
+    const to = from + m[0].length;
+    const newline = line.indexOf("\n", to);
+    const end = Math.min(links[i + 1]?.index ?? line.length, newline === -1 ? line.length : newline);
+    const mm = META.exec(line.slice(to, end));
+    const meta = mm ? parseMeta(mm[1]) : undefined;
+    const geo = GEO_TARGET.exec(m[2]);
+    if (!geo && meta?.locationUrl !== m[2]) continue;
+    const lat = geo ? Number(geo[1]) : meta?.lat;
+    const lng = geo ? Number(geo[2]) : meta?.lng;
+    if (lat === undefined || lng === undefined || !isValidLatLng(lat, lng)) continue;
+    out.push({ name: m[1], lat, lng, url: geo ? undefined : m[2], from, to, meta,
+      metaFrom: mm ? to + mm.index : undefined, metaTo: mm ? to + mm.index + mm[0].length : undefined });
+  }
+  return out;
+}
+
+function stopCandidates(text: string): RegExpExecArray[] {
+  return [...maskMeta(text).matchAll(STOP_LINK)].filter((m) => m[2].startsWith("geo:") || isGoogleMapsUrl(m[2]));
 }
 
 /** Blanks every `%%wf:{}%%` comment in `s`, keeping offsets, so emoji inside saved data are not read as the user's. */
@@ -430,24 +464,22 @@ export function setTransportOnLine(line: string, stop: Pick<Stop, "from" | "to" 
   return patchLineMeta(out, savedVia && savedVia !== mode ? { via: undefined, leg: undefined } : { via: undefined }, at);
 }
 
-/** The `%%wf:{}%%` comment that belongs to the link ending at `linkEnd`: the first one before the next geo link. */
-function metaSpan(line: string, linkEnd: number): { start: number; end: number; meta: PlaceMeta } | null {
+/** The `%%wf:{}%%` comment that belongs to the link ending at `linkEnd`: the first one before the next link. */
+export function metaSpan(line: string, linkEnd: number): { start: number; end: number; meta: PlaceMeta } | null {
   const rest = line.slice(linkEnd);
-  const nextLink = rest.search(/\[[^\]]*\]\(geo:/);
-  const scope = nextLink === -1 ? rest : rest.slice(0, nextLink);
+  const nextLink = stopCandidates(rest)[0];
+  const scope = nextLink ? rest.slice(0, nextLink.index) : rest;
   const mm = META.exec(scope);
   if (!mm) return null;
   return { start: linkEnd + mm.index, end: linkEnd + mm.index + mm[0].length, meta: parseMeta(mm[1]) ?? {} };
 }
 
 /**
- * True when the stop's geo link is still at the offsets the pane parsed it
+ * True when the stop's link is still at the offsets the pane parsed it
  * from, so a write computed earlier lands on the stop it was meant for.
  */
-export function stopStillAt(line: string, stop: Pick<Stop, "from" | "to" | "lat" | "lng">): boolean {
-  const re = new RegExp(GEO_LINK.source);
-  const m = re.exec(line.slice(stop.from, stop.to));
-  return !!m && m.index === 0 && m[0].length === stop.to - stop.from && Number(m[2]) === stop.lat && Number(m[3]) === stop.lng;
+export function stopStillAt(line: string, stop: Pick<Stop, "from" | "to" | "lat" | "lng"> & Partial<Pick<Stop, "url">>): boolean {
+  return stopLinks(line).some((link) => link.from === stop.from && link.to === stop.to && link.lat === stop.lat && link.lng === stop.lng && link.url === stop.url);
 }
 
 /**
@@ -481,19 +513,20 @@ export function patchLineMeta(line: string, patch: Partial<PlaceMeta>, at?: Pick
   if (!text) return line;
   let after = at?.to;
   if (after === undefined) {
-    GEO_LINK.lastIndex = 0;
-    let last: RegExpExecArray | null = null;
-    let m: RegExpExecArray | null;
-    while ((m = GEO_LINK.exec(line))) last = m;
+    const links = stopLinks(line);
+    const last = links[links.length - 1];
     if (!last) return line;
-    after = last.index + last[0].length;
+    after = last.to;
   }
   return `${line.slice(0, after)} ${text}${line.slice(after)}`;
 }
 
 /** Serialises a stop back to its inline form. */
-export function formatStop(name: string, lat: number, lng: number, meta?: PlaceMeta, emoji?: string): string {
-  const parts = [`${emoji ? emoji + " " : ""}[${name.replace(/[[\]]/g, "")}](geo:${round(lat)},${round(lng)})`];
+export function formatStop(name: string, lat: number, lng: number, meta?: PlaceMeta, emoji?: string, mapsUrl?: string): string {
+  const url = mapsUrl && isGoogleMapsUrl(mapsUrl) ? mapsUrl.replace(/\(/g, "%28").replace(/\)/g, "%29") : undefined;
+  if (url) meta = { ...meta, lat: Number(round(lat)), lng: Number(round(lng)), locationUrl: url };
+  const target = url ?? `geo:${round(lat)},${round(lng)}`;
+  const parts = [`${emoji ? emoji + " " : ""}[${name.replace(/[[\]]/g, "")}](${target})`];
   if (meta && Object.keys(meta).length > 0) parts.push(`%%wf:${JSON.stringify(compactMeta(meta))}%%`);
   return parts.join(" ");
 }
@@ -509,6 +542,8 @@ export function parseMeta(json: string): PlaceMeta | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const r = raw as Record<string, unknown>;
   const out: PlaceMeta = {};
+  if (typeof r.lat === "number" && typeof r.lng === "number" && isValidLatLng(r.lat, r.lng)) { out.lat = r.lat; out.lng = r.lng; }
+  if (typeof r.locationUrl === "string") out.locationUrl = r.locationUrl;
   if (typeof r.rating === "number" && Number.isFinite(r.rating)) out.rating = r.rating;
   if (typeof r.utc === "number" && Number.isInteger(r.utc)) out.utc = r.utc;
   if (Array.isArray(r.hours) && r.hours.every((h) => typeof h === "string")) out.hours = r.hours;
@@ -533,6 +568,8 @@ export function parseMeta(json: string): PlaceMeta | undefined {
 
 function compactMeta(meta: PlaceMeta): PlaceMeta {
   const out: PlaceMeta = {};
+  if (meta.lat !== undefined && meta.lng !== undefined) { out.lat = meta.lat; out.lng = meta.lng; }
+  if (meta.locationUrl) out.locationUrl = meta.locationUrl;
   if (meta.rating !== undefined) out.rating = Math.round(meta.rating * 10) / 10;
   if (meta.hours?.length) out.hours = meta.hours;
   if (meta.address) out.address = meta.address;

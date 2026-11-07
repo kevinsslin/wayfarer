@@ -81,7 +81,7 @@ const obsidianStub = {
   debounce: (fn) => fn,
   requestUrl: async (request) => { googleRequests.push(request); return { status: 200, json: { places: [], routes: [] }, text: "" }; },
 };
-const codemirrorStateStub = { RangeSetBuilder: class { add() {} finish() { return {}; } } };
+const codemirrorStateStub = { RangeSetBuilder: class { ranges = []; add(from, to) { this.ranges.push({ from, to }); } finish() { return this.ranges; } } };
 const codemirrorViewStub = {
   Decoration: { replace: () => ({}) },
   EditorView: {},
@@ -246,6 +246,61 @@ for (const changed of [routeNote.replace("08:00", "20:00"), routeNote.replace("3
 openNote("A.md", routeNote);
 plugin.setStopMeta(plugin.current.itinerary.stops[1], { leg: savedLeg }, true);
 assert(source.includes('"departure"'), "a matching route still saves to the original stop");
+
+// A converted stop retains its actual href, including after transport edits
+// and another conversion pass. This also works without any API key.
+for (const apiKey of ["", "smoke-key"]) {
+  plugin.settings.googleApiKey = apiKey;
+  let requests = 0;
+  obsidianStub.requestUrl = async () => { requests++; return details; };
+  const url = "https://www.google.com/maps/place/Hotel/@35,139,17z";
+  openNote("A.md", `## 2027-01-01\n- [My $& hotel](${url})`);
+  assert(await plugin.convert(md.editor, 1, url), "place link converts to a mapped stop");
+  assert(source.includes(`[My $& hotel](${url})`) && !source.includes("geo:"), "original href and user label survive conversion");
+  plugin.refresh();
+  const stop = plugin.current.itinerary.stops[0];
+  assert(stop?.url === url && stop.lat === 35 && stop.lng === 139, "reopening the note reads the preserved link's pin");
+  plugin.setStopTransport(stop, "walk");
+  assert(source.includes(`[My $& hotel](${url})`) && source.includes("🚶"), "transport edits keep the original href");
+  const before = source, count = requests;
+  await plugin.convertAll(md.editor);
+  assert(source === before && requests === count, "a converted link is not fetched or converted again");
+
+  const doc = {
+    sliceString: (from, to) => source.slice(from, to),
+    lineAt: (at) => ({ number: source.slice(0, at).split("\n").length }),
+  };
+  const view = { visibleRanges: [{ from: 0, to: source.length }], state: { doc, selection: { main: { head: 0 } } } };
+  const decorations = new plugin.editorExtensions[0].cls(view).decorations;
+  assert(decorations.length === 1 && source.slice(decorations[0].from, decorations[0].to).startsWith("%%wf:"), "Live Preview decorates the metadata while keeping the original link");
+
+  const changedUrl = url.replace("/Hotel/", "/Store/");
+  source = source.replace(`[My $& hotel](${url})`, () => `[My $& hotel](${changedUrl})`);
+  plugin.refresh();
+  assert(plugin.current.itinerary.stops.length === 0, "editing a place href invalidates its old pin");
+  await plugin.convertAll(md.editor);
+  plugin.refresh();
+  assert(plugin.current.itinerary.stops[0]?.url === changedUrl && (source.match(/%%wf:/g) ?? []).length === 1, "reconversion replaces stale metadata instead of duplicating it");
+  source = before;
+
+  // Reading view leaves new links alone and resolves legacy geo links by ID.
+  const anchor = (name, href) => ({
+    textContent: name, attrs: { href },
+    getAttribute(key) { return this.attrs[key]; },
+    setAttribute(key, value) { this.attrs[key] = value; },
+    setAttr(key, value) { this.attrs[key] = value; },
+    addClass() {}, insertAdjacentElement() {},
+  });
+  globalThis.createSpan = () => ({ textContent: "", title: "" });
+  const original = anchor("My $& hotel", url);
+  plugin.postProcessors[0]({ querySelectorAll: () => [original] }, { getSectionInfo: () => ({ text: source, lineStart: 0, lineEnd: 1 }) });
+  assert(original.attrs.href === url, "Reading view preserves the store href");
+  const legacy = anchor("Cafe", "geo:35,139");
+  plugin.postProcessors[0]({ querySelectorAll: () => [legacy] }, { getSectionInfo: () => ({ text: '- [Cafe](geo:35,139) %%wf:{"placeId":"ChIJcafe"}%%', lineStart: 0, lineEnd: 0 }) });
+  assert(new URL(legacy.attrs.href).searchParams.get("query_place_id") === "ChIJcafe", "legacy Reading-view links open the business by Place ID");
+}
+plugin.settings.googleApiKey = "smoke-key";
+console.log("smoke: OK (original Maps href, keyless import, transport, repeat conversion and Reading view)");
 
 openNote("A.md", note);
 let resolveRequest;

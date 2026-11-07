@@ -18,7 +18,7 @@ Saved place details and routed legs travel with the note as hidden metadata. Syn
 
 ## What it does
 
-- **Stops are links.** `[Name](geo:lat,lng)`, the same inline format the [Map View](https://github.com/esm7/obsidian-map-view) plugin reads. You rarely type it: paste a full Google Maps place link and it converts to a stop. Short `maps.app.goo.gl` links can be expanded on desktop.
+- **Stops are links.** Paste a full Google Maps place link to turn it into a stop. The note keeps the original clickable Google Maps link, with coordinates saved as hidden metadata, so clicking the name opens the original place. `[Name](geo:lat,lng)`, the inline format the [Map View](https://github.com/esm7/obsidian-map-view) plugin reads, is also supported. Short `maps.app.goo.gl` links can be expanded on desktop.
 - **Headings are days.** `## 2026-09-17 Thu Up to Senjogahara` starts a day. A range like `## 2026-09-19 ~ 2026-09-26 Tokyo` keeps a stretch you have not planned yet as one block. Undated sections (research, to-dos, candidates) stay in the same note and off the map.
 - **The map follows the note.** Put the cursor on a stop and the map flies there. Pins are coloured and numbered per day, with a line between consecutive stops.
 - **A timeline beside the map.** The day's stops top to bottom with photo, time, name and your remark, and the leg between each pair. Click a card to fly there; drag a card to reorder the note.
@@ -47,7 +47,7 @@ Saved place details and routed legs travel with the note as hidden metadata. Syn
 - [ ] Ryuzu Falls if there is time
 ```
 
-Run **Insert day headings for a trip** to get the headings, then paste links under each. The full date on the heading is what makes weekday, opening-hours and departure checks possible. Indented lines under a stop are its notes. No frontmatter is needed. The complete format is in [FORMAT.md](skills/wayfarer-plan-trip/FORMAT.md).
+Run **Insert day headings for a trip** to get the headings, then paste links under each. The full date on the heading is what makes weekday, opening-hours and departure checks possible. Indented lines under a stop are its notes. No frontmatter is needed. The complete format is in [FORMAT.md](skills/wayfarer-plan-trip/FORMAT.md). Imported Google Maps links need the updated Wayfarer on each device to appear on the map; older versions only recognize `geo:` stops. The original Maps links work as ordinary Markdown links outside the plugin.
 
 ![Rating and hours chips after each link in Reading view](docs/screenshots/reading.jpg)
 

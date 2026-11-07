@@ -46,7 +46,8 @@ Not planned day by day yet. Staying in the city over the long weekend.
 | `## 2026-09-17 Thu Theme` | A day. One heading per day, the full `YYYY-MM-DD` first, then anything. Only a full date counts as a date; a heading without one is a day with no weekday or hours checks. Level is a setting (default `##`). |
 | `## To do` or any heading without a date | Once the note has dated headings, an undated section is not a day: its links stay in the text and do not appear on the map, wherever it sits in the note. Text before the first heading is treated the same way. The to-do checklist goes at the top, above the days, because that is what gets read first. |
 | `## 2026-09-19 ~ 2026-09-26 Tokyo` | A range: several days kept as one block, for a stretch not yet planned day by day. Two full dates joined by `~`, `～`, `-`, `to` or `到`. One chip (`9/19~9/26`), no weekday checks. Split it into day headings once the days are decided. |
-| `[Name](geo:lat,lng)` | A stop. Same format as the Map View plugin. |
+| `[Name](geo:lat,lng)` | A coordinate-only stop. Same format as the Map View plugin. |
+| `[Name](Google Maps URL)` with saved coordinate metadata | An imported stop whose name still opens the original Google Maps place. The plugin writes the coordinate metadata during conversion. |
 | `07:53` at line start | The stop's time, local time at that place. |
 | Transport emoji before the link | How you get there: 🚶 walk, 🚲 bike, 🚗 car, 🚕 taxi, 🚌 bus, 🚆 🚄 🚃 train, 🚇 metro, 🚊 tram, ⛴️ boat, ✈️ flight. Words are not read. Picking a transport on a desktop timeline arrow or via **Change transport** in a stop’s details writes this emoji before the link (replacing the one there). It is the only place the transport lives. |
 | Indented lines under a stop | The stop's notes, shown verbatim on its card and popup. No format inside them is interpreted: a `geo:` link there is text, not another stop. |
@@ -55,5 +56,5 @@ Not planned day by day yet. Staying in the city over the long weekend.
 | Category emoji before the link | The pin's icon. Otherwise from the Google type or the name. Airports are 🛬 and ports ⚓ so they never read as a flight or boat leg. |
 | Rest of the line | Shown as the remark in the stop's card. |
 | `![[img.jpg]]` or image URL on the line or the next | Photo in the card. |
-| `%%wf:{…}%%` after a link | Plugin metadata: Google details (rating, hours, address, photo, UTC offset) and the last routed leg. Written by the plugin, never by hand. Leave it as is. |
-| Full Google Maps URL | Converted to a stop when pasted or via the convert command. Short `maps.app.goo.gl` links only on desktop. |
+| `%%wf:{…}%%` after a link | Plugin metadata: Google details (rating, hours, address, photo, UTC offset) and the last routed leg. Includes coordinates for imported Google Maps links. Written by the plugin, never by hand. Leave it as is. |
+| Full Google Maps URL | Converted to a stop when pasted or via the convert command; the original URL stays clickable. Short `maps.app.goo.gl` links only on desktop. |

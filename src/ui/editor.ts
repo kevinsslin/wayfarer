@@ -3,16 +3,19 @@ import { RangeSetBuilder } from "@codemirror/state";
 import type { Editor } from "obsidian";
 import { isGoogleMapsUrl } from "../core/gmaps-url";
 import { CATEGORY_EMOJI, pickCategory } from "../core/category";
-import { formatStop, parseMeta, type PlaceMeta } from "../core/itinerary";
+import { formatStop, metaSpan, stopLinks, type PlaceMeta } from "../core/itinerary";
 import type { ResolvedPlace } from "../core/resolve";
 import { todayHours } from "./map-view";
 
 /** Finds a Google Maps URL in a line, returning its character span. Links in `skip` are passed over. */
 export function findMapsUrl(line: string, skip?: Set<string>): { url: string; from: number; to: number } | null {
+  const converted = stopLinks(line);
   const re = /https?:\/\/\S+/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(line))) {
     const url = m[0].replace(/[),.;!?]+$/, "");
+    const index = m.index;
+    if (converted.some((link) => link.url && index >= link.from && index < link.to)) continue;
     if (isGoogleMapsUrl(url) && !skip?.has(url)) return { url, from: m.index, to: m.index + url.length };
   }
   return null;
@@ -22,7 +25,7 @@ export function findMapsUrl(line: string, skip?: Set<string>): { url: string; fr
 export function stopText(place: ResolvedPlace, withEmoji = true): string {
   const cat = pickCategory({ googleType: place.meta?.type, name: place.name });
   const emoji = withEmoji && cat !== "place" ? CATEGORY_EMOJI[cat] : undefined;
-  return formatStop(place.name, place.lat, place.lng, place.meta, emoji);
+  return formatStop(place.name, place.lat, place.lng, place.meta, emoji, place.url);
 }
 
 /**
@@ -39,8 +42,12 @@ export function replaceUrlInEditor(editor: Editor, line: number, url: string, re
     // `[label](url)`: the whole link goes, and the user's label stays as the stop's name.
     const link = /\[([^\]]*)\]\($/.exec(text.slice(0, idx));
     if (link && text[idx + url.length] === ")") {
-      const named = link[1] ? replacement.replace(/\[[^\]]*\]\(geo:/, `[${link[1].replace(/[[\]]/g, "")}](geo:`) : replacement;
-      editor.replaceRange(named, { line: ln, ch: idx - link[0].length }, { line: ln, ch: idx + url.length + 1 });
+      const named = link[1] ? replacement.replace(/\[[^\]]*\]\(/, () => `[${link[1].replace(/[[\]]/g, "")}](`) : replacement;
+      const linkEnd = idx + url.length + 1;
+      const existing = metaSpan(text, linkEnd);
+      // Re-resolving an edited href replaces the stale coordinates and facts.
+      const between = existing ? text.slice(linkEnd, existing.start) : "";
+      editor.replaceRange(named + between, { line: ln, ch: idx - link[0].length }, { line: ln, ch: existing?.end ?? linkEnd });
       return true;
     }
     editor.replaceRange(replacement, { line: ln, ch: idx }, { line: ln, ch: idx + url.length });
@@ -50,8 +57,6 @@ export function replaceUrlInEditor(editor: Editor, line: number, url: string, re
 }
 
 /* ---------- Live Preview decorations ---------- */
-
-const META_RE = /\[([^\]]*)\]\(geo:(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)[^)]*\)(\s*%%wf:(\{.*?\})%%)/g;
 
 class MetaWidget extends WidgetType {
   /** Keeps the raw JSON: comparing strings is what CodeMirror does on every update, parsing happens once per drawn widget. */
@@ -102,15 +107,12 @@ export const metaDecorations = ViewPlugin.fromClass(
       this.cursorLine = cursorLine;
       for (const { from, to } of view.visibleRanges) {
         const text = view.state.doc.sliceString(from, to);
-        META_RE.lastIndex = 0;
-        let m: RegExpExecArray | null;
-        while ((m = META_RE.exec(text))) {
-          const start = from + m.index + m[0].length - m[4].length;
-          const end = from + m.index + m[0].length;
+        for (const link of stopLinks(text)) {
+          if (!link.meta || link.metaFrom === undefined || link.metaTo === undefined) continue;
+          const start = from + link.metaFrom;
+          const end = from + link.metaTo;
           if (view.state.doc.lineAt(start).number === cursorLine) continue;
-          const meta = parseMeta(m[5]);
-          if (!meta) continue;
-          b.add(start, end, Decoration.replace({ widget: new MetaWidget(m[5], meta) }));
+          b.add(start, end, Decoration.replace({ widget: new MetaWidget(text.slice(link.metaFrom, link.metaTo), link.meta) }));
         }
       }
       return b.finish();
