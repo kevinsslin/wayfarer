@@ -3,7 +3,7 @@
   "obsidian": "1.11.7",
   "environment": "isolated temporary desktop vault; no Google API key",
   "assets_sha256": {
-    "main.js": "0a895a450e219e1c431c771acbef436dd98e491751978f4561a310611dd7b16f",
+    "main.js": "7ea997d3e16af971318f9920ed4dbe3b34ce550035a3a755b01ce428c88ab85a",
     "manifest.json": "53420316ab67d5467c96eb1197dad482dd460834101289448adf924ff32004a6",
     "styles.css": "8efba99d459b98d0b979755a09c9688e7d45e298751caf3e2ecd95a3171dd5bf"
   },

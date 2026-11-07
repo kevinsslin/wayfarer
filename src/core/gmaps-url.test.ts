@@ -82,9 +82,11 @@ describe("short-link response URLs", () => {
     expect(mapsUrlFromHtml('<img src="https://maps.google.com/maps/api/staticmap?center=1,2">')).toBeNull();
     expect(mapsUrlFromHtml("Google requires consent")).toBeNull();
   });
-  it("prefers the exact place pin over a viewport-only URL", () => {
-    const exact = "https://www.google.com/maps/place/Cafe/data=!3d35!4d139";
-    const html = `"https://www.google.com/maps/place/Cafe/@30,130,10z" "${exact}"`;
-    expect(mapsUrlFromHtml(html)).toBe(exact);
+  it("does not import a related place instead of the canonical destination", () => {
+    const canonical = "https://www.google.com/maps/place/Cafe/@35,139,17z";
+    const related = "https://www.google.com/maps/place/Other/data=!3d30!4d130";
+    const html = `<link rel="canonical" href="${canonical}"><script>var related="${related}"</script>`;
+    expect(mapsUrlFromHtml(html)).toBe(canonical);
+    expect(mapsUrlFromHtml(`<a href="${related}">Related place</a>`)).toBeNull();
   });
 });

@@ -126,7 +126,14 @@ function tryUrl(text: string): URL | null {
 export function mapsUrlFromHtml(html: string): string | null {
   const decoded = html.replace(/\\u([0-9a-f]{4})/gi, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)))
     .replace(/\\\//g, "/").replace(/&amp;/g, "&").replace(/&quot;|&#34;/g, '"').replace(/&#39;/g, "'");
-  const urls = decoded.match(/https?:\/\/(?:[a-z0-9-]+\.)*google\.[a-z.]+\/maps\/(?:place|search|dir)\/[^\s"'<>\\]+/gi) ?? [];
+  // Prefer explicit destination metadata. Other Maps links in a page can be
+  // related places, so they must never become the imported stop's pin.
+  const canonical = [...decoded.matchAll(/<(?:link|meta)\b[^>]*>/gi)]
+    .filter(([tag]) => /(?:rel\s*=\s*["']canonical["']|property\s*=\s*["']og:url["'])/i.test(tag))
+    .map(([tag]) => /(?:href|content)\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1])
+    .filter((url): url is string => !!url);
+  const continuation = [...decoded.matchAll(/[?&]continue=(https?(?::\/\/|%3a%2f%2f)[^\s"'<>\\]+)/gi)].map((m) => m[1]);
+  const urls = canonical.length ? canonical : continuation;
   let best: { url: string; score: number } | null = null;
   for (const raw of urls) {
     const variants = [raw];
@@ -134,7 +141,7 @@ export function mapsUrlFromHtml(html: string): string | null {
     for (const candidate of variants) {
       let parsed: ParsedMapsUrl | null;
       try { parsed = parseGoogleMapsUrl(candidate); } catch { continue; }
-      if (!parsed || parsed.isShort) continue;
+      if (!isGoogleMapsUrl(candidate) || !parsed || parsed.isShort) continue;
       const score = parsed.exact && parsed.lat !== undefined ? 4 : parsed.placeId ? 3 : parsed.name && parsed.lat !== undefined ? 2 : parsed.name ? 1 : 0;
       if (score && (!best || score > best.score)) best = { url: candidate, score };
     }
