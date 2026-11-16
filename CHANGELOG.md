@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.13] - Unreleased
+
+- iOS and iPadOS: the map keeps showing its trip when the map tab is focused. Before, opening the map in its own tab, or tapping it to pan or pick a stop, swapped in whichever note sat in the first tab, usually leaving an empty map. With the map in front at startup, it shows the most recently opened note. Reordering stops and picking transport on the map only ever write to the note the map shows. ([#2](https://github.com/kevinsslin/wayfarer/issues/2))
+- Works alongside Map View and other Leaflet plugins. Wayfarer no longer replaces the global `window.L` (it bundles Leaflet's ESM build), so Map View's maps stop rendering as empty grey frames. Leaflet's stylesheet is scoped to the Wayfarer pane and no longer styles other plugins' maps. ([#3](https://github.com/kevinsslin/wayfarer/issues/3))
+
 ## [0.1.12] - 2026-11-07
 
 - Imported Google Maps stops keep their original clickable business URL, with validated coordinates saved separately. Reading view, map cards and KML use the original URL or a saved Place ID. Editing a URL invalidates its old pin until reconverted. The planning skill preserves source links as well.
