@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoryFromGoogleType, categoryFromName, firstEmoji, pickCategory, transportEmoji } from "./category";
+import { categoryFromGoogleType, categoryFromName, firstEmoji, pickCategory, transportEmoji, writtenCategoryEmoji } from "./category";
 
 describe("firstEmoji", () => {
   it("finds emoji and ignores digits", () => {
@@ -32,6 +32,16 @@ describe("category", () => {
     expect(categoryFromGoogleType("coffee_shop")).toBe("cafe");
     expect(categoryFromGoogleType("train_station")).toBe("station");
     expect(categoryFromGoogleType(undefined)).toBeNull();
+  });
+});
+
+describe("writtenCategoryEmoji", () => {
+  it("skips transport emoji on either side", () => {
+    expect(writtenCategoryEmoji("- 12:00 🚌 🍜 ")).toBe("🍜");
+    expect(writtenCategoryEmoji("- 🍜 🚌 ")).toBe("🍜");
+    expect(writtenCategoryEmoji("- 🚶‍♀️ ⛩️ ")).toBe("⛩️");
+    expect(writtenCategoryEmoji("- 17:20 🚌 ")).toBeNull();
+    expect(writtenCategoryEmoji("1. 09:00 ")).toBeNull();
   });
 });
 

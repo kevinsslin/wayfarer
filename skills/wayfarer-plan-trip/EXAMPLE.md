@@ -34,7 +34,7 @@ Booked: Revaty Kegon 47, Asakusa 13:00 to Tobu-Nikko 14:50 on 9/16, two reserved
 
 ## 2026-09-16 Wed Arrive in Nikko
 
-- 15:40 🚆 [Tobu-Nikko Station](geo:36.7476,139.6189) Revaty Kegon from Asakusa, seat reserved
+- 14:50 🚆 [Tobu-Nikko Station](geo:36.7476,139.6189) Revaty Kegon from Asakusa, seat reserved
 - 🚶 [Shinkyo Bridge](geo:36.7546,139.6033) the red bridge at the entrance to the shrines
 - ⛩️ [Nikko Toshogu](geo:36.7580,139.5990) last entry 16:30
     Sleeping Cat and the Three Wise Monkeys carvings
@@ -47,13 +47,14 @@ Booked: Revaty Kegon 47, Asakusa 13:00 to Tobu-Nikko 14:50 on 9/16, two reserved
 
 Bear bell on the boardwalk, and do not walk at the front or the back alone. Falls to lake is downhill in this direction, which is why it runs this way round.
 
-1. 07:53 🚌 [Yudaki Falls](geo:36.7959,139.4285) Tobu bus from stop 2A, two-day pass covers it
+1. 🏨 [Nikko Station Hotel Classic](geo:36.7469,139.6215) check out, bags come with you
+2. 07:53 🚌 [Yudaki Falls](geo:36.7959,139.4285) Tobu bus from stop 2A, two-day pass covers it
     Buy the pass before boarding. The cheaper Chuzenji pass does not reach Yumoto
-2. 🚶 [Akanuma](geo:36.7710,139.4558) boardwalk across the marsh, about 1h45
+3. 🚶 [Akanuma](geo:36.7710,139.4558) boardwalk across the marsh, about 1h45
     Closed sometimes after rain, check the park site the night before
-3. 12:52 🚌 [Kegon Falls](geo:36.7380,139.5020) elevator to the base, 570 yen, last elevator 17:00
-4. 🚶 [Chuzenji Lake](geo:36.7368,139.4769) lakeside walk if legs allow
-5. 17:20 🚌 ♨️ [Yumoto Onsen](geo:36.8068,139.4231) soak, dinner at the ryokan at 18:30
+4. 12:52 🚌 [Kegon Falls](geo:36.7380,139.5020) elevator to the base, 570 yen, last elevator 17:00
+5. 🚶 [Chuzenji Lake](geo:36.7368,139.4769) lakeside walk if legs allow
+6. 17:20 🚌 ♨️ [Yumoto Onsen](geo:36.8068,139.4231) soak, dinner at the ryokan at 18:30
     Later buses 17:55 and 18:55, the last one in. About 12C at night, bring long sleeves
 
 ## Fallback: Karuizawa if the forecast turns

@@ -4,6 +4,8 @@
 
 - iOS and iPadOS: the map keeps showing its trip when the map tab is focused. Before, opening the map in its own tab, or tapping it to pan or pick a stop, swapped in whichever note sat in the first tab, usually leaving an empty map. With the map in front at startup, it shows the most recently opened note. Reordering stops and picking transport on the map only ever write to the note the map shows. ([#2](https://github.com/kevinsslin/wayfarer/issues/2))
 - Works alongside Map View and other Leaflet plugins. Wayfarer no longer replaces the global `window.L` (it bundles Leaflet's ESM build), so Map View's maps stop rendering as empty grey frames. Leaflet's stylesheet is scoped to the Wayfarer pane and no longer styles other plugins' maps. ([#3](https://github.com/kevinsslin/wayfarer/issues/3))
+- A category emoji written after the transport emoji (`- 🚌 🍜 [Ichiran](geo:…)`, the order the planning skill teaches) now sets the pin's icon. Before, only the first emoji before the link was read, so the pin fell back to the name or the Google type.
+- Planning skill: what to do when coordinates cannot be verified, how "not found at the pin" flags a wrong coordinate, and that a leg is only drawn from the previous stop of the same day. The example note starts its second day at the hotel and no longer disagrees with itself about the train's arrival.
 
 ## [0.1.12] - 2026-11-07
 

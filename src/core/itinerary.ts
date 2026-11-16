@@ -123,7 +123,7 @@ export interface ParseOptions {
 }
 
 import { isGoogleMapsUrl, isValidLatLng } from "./gmaps-url";
-import { TRANSPORT_EMOJI, firstEmoji, isTransportEmoji, pickCategory, transportEmoji, type Category, type Transport } from "./category";
+import { TRANSPORT_EMOJI, isTransportEmoji, pickCategory, transportEmoji, writtenCategoryEmoji, type Category, type Transport } from "./category";
 
 const STOP_LINK = /\[([^\]]*)\]\((geo:[^)]*|https?:\/\/[^)\s]+)\)/g;
 const GEO_TARGET = /^geo:(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/;
@@ -187,7 +187,6 @@ export function parseItinerary(markdown: string, opts: ParseOptions = {}): Itine
       const before = maskMeta(line.slice(prevEnd, link.from));
       prevEnd = link.to;
       const name = link.name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-      const emojiBefore = firstEmoji(before.replace(/\d{1,2}:\d{2}/, ""));
       current.stops.push({
         name,
         url: link.url,
@@ -198,7 +197,7 @@ export function parseItinerary(markdown: string, opts: ParseOptions = {}): Itine
         beforeFrom: link.from - before.length,
         to: link.to,
         meta,
-        emoji: emojiBefore && !isTransportEmoji(emojiBefore) ? emojiBefore : undefined,
+        emoji: writtenCategoryEmoji(before) ?? undefined,
         category: pickCategory({ googleType: meta?.type, name }),
         time,
         // The emoji in the text is what everyone reads, so it wins; `via` is only read from older notes.

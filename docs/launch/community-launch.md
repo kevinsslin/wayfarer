@@ -26,7 +26,7 @@ The [official registry](https://github.com/obsidianmd/obsidian-releases/blob/mas
 
 ## What to show
 
-A 30–45 second walkthrough is enough:
+A 30 to 45 second walkthrough is enough:
 
 1. A short travel request and the resulting Markdown note.
 2. Select a day or a stop and see it on the map.
@@ -48,7 +48,7 @@ Write days as headings and stops as links, or paste Google Maps place links. Way
 
 There is also an optional planning skill for Claude Code, Codex and other compatible agents. It helps research opening hours and transport, write the itinerary, and keep constraints, bookings and backup plans in the same note. You can use Wayfarer entirely without AI.
 
-Basic pins and straight-line distances work without a Google API key. Your own key enables supported routes, place details and photos. Saved details and routes travel with the note. Browsing stops does not create a separate progress record. Map tiles and photos need a connection. Short Google Maps links are expanded on desktop.
+Basic pins and straight-line distances work without a Google API key. Your own key enables supported routes, place details and photos. Saved details and routes travel with the note. Browsing stops does not create a separate progress record. Map tiles and photos need a connection. Short Google Maps links are expanded on desktop and mobile.
 
 [Install Wayfarer](https://community.obsidian.md/plugins/wayfarer) · [Source, screenshots and sample note](https://github.com/kevinsslin/wayfarer)
 

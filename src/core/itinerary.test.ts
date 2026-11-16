@@ -181,6 +181,13 @@ describe("setTransportOnLine", () => {
     expect(setTransportOnLine(line, stopOf(line), "walk")).toBe("- 🚶 [A](geo:1,2)");
     expect(setTransportOnLine(line, stopOf(line), "bus")).toBe(line);
   });
+  it("keeps a category emoji written after the transport emoji", () => {
+    const after = stopOf("- 12:00 🚇 🎭 [Kokugikan Sumo](geo:35.6969,139.7933)");
+    expect(after).toMatchObject({ transport: "metro", emoji: "🎭", time: "12:00" });
+    const before = stopOf("- 🎭 🚇 [Kokugikan Sumo](geo:35.6969,139.7933)");
+    expect(before).toMatchObject({ transport: "metro", emoji: "🎭" });
+    expect(stopOf("- 🚌 [Ichiran](geo:35.1,139.1)").emoji).toBeUndefined();
+  });
   it("the emoji wins over an older via when both are present", () => {
     expect(stopOf(`- 🚶 [A](geo:1,2) %%wf:{"via":"bus"}%%`).transport).toBe("walk");
   });
