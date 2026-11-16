@@ -323,6 +323,56 @@ obsidianStub.Platform.isMobile = false;
 plugin.settings.googleApiKey = "smoke-key";
 console.log("smoke: OK (original Maps href, keyless import, transport, repeat conversion and Reading view)");
 
+// Phone or tablet: the map is a tab or split in the main area, so once it is
+// focused the most recent leaf is the map itself, and an unrelated note sits
+// in the first tab. The map keeps its own note, and its writes never land in
+// another one, even after its note is closed.
+{
+  const saved = { workspace: { ...app.workspace }, vault: app.vault, mode: md.getMode };
+  const texts = new Map([["Trip.md", "## 2027-01-01\n- [Hotel](geo:35,139)\n- [Shrine](geo:35.01,139.01)"], ["Other.md", "## 2027-02-02\n- [Far](geo:10,10)\n- [Away](geo:11,11)"]]);
+  const other = Object.assign(new obsidianStub.MarkdownView(), { file: Object.assign(new obsidianStub.TFile(), { path: "Other.md" }), getMode: () => "preview" });
+  other.editor = { getValue: () => texts.get("Other.md"), lineCount: () => texts.get("Other.md").split("\n").length, getLine: (l) => texts.get("Other.md").split("\n")[l] ?? "", getCursor: () => ({ line: 0, ch: 0 }) };
+  const mobileWrites = [];
+  app.vault = { process: async (file, transform) => {
+    mobileWrites.push(file.path);
+    const next = transform(file.path === "Other.md" ? texts.get("Other.md") : source);
+    if (file.path === "Other.md") texts.set("Other.md", next); else source = next;
+  } };
+  md.getMode = () => "preview";
+  openNote("Trip.md", texts.get("Trip.md"));
+  app.workspace.getActiveViewOfType = () => null;
+  app.workspace.getMostRecentLeaf = () => ({ view: { getViewType: () => "wayfarer" } });
+  app.workspace.getLeavesOfType = (type) => type === "markdown" ? [{ view: other }, { view: md }] : [];
+  app.workspace.getLastOpenFiles = () => [];
+  plugin.refresh();
+  assert(plugin.current.file.path === "Trip.md", "focusing the map tab keeps its note instead of the first markdown tab");
+  await plugin.moveStopLine(2, 1);
+  assert(source.split("\n")[1].includes("Shrine") && !mobileWrites.includes("Other.md"), "reordering on a focused map edits the map's note only");
+  plugin.setStopTransport(plugin.current.itinerary.stops[1], "walk");
+  await Promise.resolve();
+  assert(source.includes("🚶") && !mobileWrites.includes("Other.md"), "transport picked on a focused map edits the map's note only");
+
+  app.workspace.getLeavesOfType = (type) => type === "markdown" ? [{ view: other }] : [];
+  plugin.refresh();
+  assert(plugin.current.file.path === "Trip.md", "closing the map's note does not swap in another note");
+  const otherBefore = texts.get("Other.md");
+  await plugin.moveStopLine(2, 1);
+  plugin.setStopTransport(plugin.current.itinerary.stops[0], "car");
+  await Promise.resolve();
+  assert(texts.get("Other.md") === otherBefore && !mobileWrites.includes("Other.md"), "map writes never reach a note the map does not show");
+
+  plugin.current = null;
+  app.workspace.getLeavesOfType = (type) => type === "markdown" ? [{ view: other }, { view: md }] : [];
+  app.workspace.getLastOpenFiles = () => ["Trip.md", "Other.md"];
+  plugin.refresh();
+  assert(plugin.current.file.path === "Trip.md", "a map restored in front of its note shows the most recently opened note");
+
+  app.workspace = saved.workspace;
+  app.vault = saved.vault;
+  md.getMode = saved.mode;
+}
+console.log("smoke: OK (map tab keeps its note on phones and tablets)");
+
 openNote("A.md", note);
 let resolveRequest;
 obsidianStub.requestUrl = () => new Promise((resolve) => { resolveRequest = resolve; });
