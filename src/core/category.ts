@@ -23,6 +23,17 @@ export function firstEmoji(text: string): string | null {
   return m ? m[0] : null;
 }
 
+/**
+ * The emoji the user wrote for the place itself: the first one that is not a
+ * transport emoji. Both "🚌 🍜 [Ichiran]" and "🍜 🚌 [Ichiran]" give 🍜.
+ */
+export function writtenCategoryEmoji(text: string): string | null {
+  for (const m of text.matchAll(new RegExp(EMOJI_RE.source, "gu"))) {
+    if (!isTransportEmoji(m[0])) return m[0];
+  }
+  return null;
+}
+
 /** Maps a Google Places (New) primaryType to a category. */
 export function categoryFromGoogleType(type: string | undefined): Category | null {
   if (!type) return null;
