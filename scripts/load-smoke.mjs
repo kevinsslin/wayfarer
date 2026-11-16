@@ -111,6 +111,9 @@ globalThis.document = {
 };
 Object.defineProperty(globalThis, "navigator", { value: { userAgent: "node", platform: "node", maxTouchPoints: 0 }, configurable: true });
 globalThis.ResizeObserver = class { observe() {} disconnect() {} };
+// Another plugin's Leaflet (Map View with Geoman attached) already owns the global.
+const otherLeaflet = { PM: { optIn: false } };
+globalThis.L = otherLeaflet;
 
 const { createRequire } = await import("node:module");
 const mod = createRequire(import.meta.url)(cjs);
@@ -132,6 +135,7 @@ const plugin = new PluginClass(app, { id: "wayfarer", version: "0.0.0-smoke" });
 await plugin.onload();
 
 const assert = (cond, msg) => { if (!cond) { console.error(`smoke: FAIL ${msg}`); process.exit(1); } };
+assert(globalThis.L === otherLeaflet, "loading the bundle leaves another plugin's window.L in place");
 assert(plugin.views["wayfarer"], "map view registered");
 assert(plugin.commands.some((c) => c.id === "open-map"), "open-map command");
 assert(plugin.commands.some((c) => c.id === "convert-maps-link"), "convert command");

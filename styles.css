@@ -2,55 +2,61 @@
  * Wayfarer styles. Leaflet's stylesheet is inlined below (Obsidian
  * plugins ship a single styles.css) and then our own rules, scoped under
  * .wayfarer-view except for the editor chip, which lives inside the note.
+ *
+ * The Leaflet rules are scoped with :where(.wayfarer-view) so they never
+ * reach another plugin's Leaflet map (Map View uses the same class names),
+ * while keeping Leaflet's own specificity so our overrides below still win.
+ * Leaflet's .leaflet-default-icon-path probe is left out: Wayfarer only uses
+ * div icons, and a global rule would change other plugins' marker paths.
  */
 
 /* required styles */
 
-.leaflet-pane,
-.leaflet-tile,
-.leaflet-marker-icon,
-.leaflet-marker-shadow,
-.leaflet-tile-container,
-.leaflet-pane > svg,
-.leaflet-pane > canvas,
-.leaflet-zoom-box,
-.leaflet-image-layer,
-.leaflet-layer {
+:where(.wayfarer-view) .leaflet-pane,
+:where(.wayfarer-view) .leaflet-tile,
+:where(.wayfarer-view) .leaflet-marker-icon,
+:where(.wayfarer-view) .leaflet-marker-shadow,
+:where(.wayfarer-view) .leaflet-tile-container,
+:where(.wayfarer-view) .leaflet-pane > svg,
+:where(.wayfarer-view) .leaflet-pane > canvas,
+:where(.wayfarer-view) .leaflet-zoom-box,
+:where(.wayfarer-view) .leaflet-image-layer,
+:where(.wayfarer-view) .leaflet-layer {
 	position: absolute;
 	left: 0;
 	top: 0;
 }
 
-.leaflet-container {
+:where(.wayfarer-view) .leaflet-container {
 	overflow: hidden;
 	-webkit-tap-highlight-color: transparent;
 }
 
-.leaflet-tile,
-.leaflet-marker-icon,
-.leaflet-marker-shadow {
+:where(.wayfarer-view) .leaflet-tile,
+:where(.wayfarer-view) .leaflet-marker-icon,
+:where(.wayfarer-view) .leaflet-marker-shadow {
 	user-select: none;
 	-webkit-user-drag: none;
 }
 
-.leaflet-tile::selection {
+:where(.wayfarer-view) .leaflet-tile::selection {
 	background: transparent;
 }
 
 /* Safari renders non-retina tile on retina better with this, but Chrome is worse */
-.leaflet-safari .leaflet-tile {
+:where(.wayfarer-view) .leaflet-safari .leaflet-tile {
 	image-rendering: -webkit-optimize-contrast;
 }
 
 /* hack that prevents hw layers "stretching" when loading new tiles */
-.leaflet-safari .leaflet-tile-container {
+:where(.wayfarer-view) .leaflet-safari .leaflet-tile-container {
 	width: 1600px;
 	height: 1600px;
 	transform-origin: 0 0;
 }
 
-.leaflet-marker-icon,
-.leaflet-marker-shadow {
+:where(.wayfarer-view) .leaflet-marker-icon,
+:where(.wayfarer-view) .leaflet-marker-shadow {
 	display: block;
 }
 
@@ -74,38 +80,38 @@
 	border-radius: 0; /* themes that round every img would leave gaps where tiles meet */
 }
 
-.leaflet-container img.leaflet-tile {
+:where(.wayfarer-view) .leaflet-container img.leaflet-tile {
 	/* See: https://bugs.chromium.org/p/chromium/issues/detail?id=600120 */
 	mix-blend-mode: plus-lighter;
 }
 
-.leaflet-container.leaflet-touch-zoom {
+:where(.wayfarer-view) .leaflet-container.leaflet-touch-zoom {
 	touch-action: pan-x pan-y;
 }
 
-.leaflet-container.leaflet-touch-drag {
+:where(.wayfarer-view) .leaflet-container.leaflet-touch-drag {
 	/* Fallback for FF which doesn't support pinch-zoom */
 	touch-action: pinch-zoom;
 }
 
-.leaflet-container.leaflet-touch-drag.leaflet-touch-zoom {
+:where(.wayfarer-view) .leaflet-container.leaflet-touch-drag.leaflet-touch-zoom {
 	touch-action: none;
 }
 
-.leaflet-container a {
+:where(.wayfarer-view) .leaflet-container a {
 	-webkit-tap-highlight-color: rgb(51 181 229 / 40%);
 }
 
-.leaflet-tile {
+:where(.wayfarer-view) .leaflet-tile {
 	filter: inherit;
 	visibility: hidden;
 }
 
-.leaflet-tile-loaded {
+:where(.wayfarer-view) .leaflet-tile-loaded {
 	visibility: inherit;
 }
 
-.leaflet-zoom-box {
+:where(.wayfarer-view) .leaflet-zoom-box {
 	width: 0;
 	height: 0;
 	box-sizing: border-box;
@@ -113,194 +119,194 @@
 }
 
 /* workaround for https://bugzilla.mozilla.org/show_bug.cgi?id=888319 */
-.leaflet-overlay-pane svg {
+:where(.wayfarer-view) .leaflet-overlay-pane svg {
 	user-select: none;
 }
 
-.leaflet-pane         {
+:where(.wayfarer-view) .leaflet-pane         {
 	z-index: 400;
 }
 
-.leaflet-tile-pane    {
+:where(.wayfarer-view) .leaflet-tile-pane    {
 	z-index: 200;
 }
 
-.leaflet-overlay-pane {
+:where(.wayfarer-view) .leaflet-overlay-pane {
 	z-index: 400;
 }
 
-.leaflet-shadow-pane  {
+:where(.wayfarer-view) .leaflet-shadow-pane  {
 	z-index: 500;
 }
 
-.leaflet-marker-pane  {
+:where(.wayfarer-view) .leaflet-marker-pane  {
 	z-index: 600;
 }
 
-.leaflet-tooltip-pane   {
+:where(.wayfarer-view) .leaflet-tooltip-pane   {
 	z-index: 650;
 }
 
-.leaflet-popup-pane   {
+:where(.wayfarer-view) .leaflet-popup-pane   {
 	z-index: 700;
 }
 
-.leaflet-map-pane canvas {
+:where(.wayfarer-view) .leaflet-map-pane canvas {
 	z-index: 100;
 }
 
-.leaflet-map-pane svg    {
+:where(.wayfarer-view) .leaflet-map-pane svg    {
 	z-index: 200;
 }
 
 /* control positioning */
 
-.leaflet-control {
+:where(.wayfarer-view) .leaflet-control {
 	position: relative;
 	z-index: 800;
 	pointer-events: auto;
 }
 
-.leaflet-top,
-.leaflet-bottom {
+:where(.wayfarer-view) .leaflet-top,
+:where(.wayfarer-view) .leaflet-bottom {
 	position: absolute;
 	z-index: 1000;
 	pointer-events: none;
 }
 
-.leaflet-top {
+:where(.wayfarer-view) .leaflet-top {
 	top: 0;
 }
 
-.leaflet-right {
+:where(.wayfarer-view) .leaflet-right {
 	right: 0;
 }
 
-.leaflet-bottom {
+:where(.wayfarer-view) .leaflet-bottom {
 	bottom: 0;
 }
 
-.leaflet-left {
+:where(.wayfarer-view) .leaflet-left {
 	left: 0;
 }
 
-.leaflet-control {
+:where(.wayfarer-view) .leaflet-control {
 	float: left;
 	clear: both;
 }
 
-.leaflet-right .leaflet-control {
+:where(.wayfarer-view) .leaflet-right .leaflet-control {
 	float: right;
 }
 
-.leaflet-top .leaflet-control {
+:where(.wayfarer-view) .leaflet-top .leaflet-control {
 	margin-top: 10px;
 }
 
-.leaflet-bottom .leaflet-control {
+:where(.wayfarer-view) .leaflet-bottom .leaflet-control {
 	margin-bottom: 10px;
 }
 
-.leaflet-left .leaflet-control {
+:where(.wayfarer-view) .leaflet-left .leaflet-control {
 	margin-left: 10px;
 }
 
-.leaflet-right .leaflet-control {
+:where(.wayfarer-view) .leaflet-right .leaflet-control {
 	margin-right: 10px;
 }
 
 /* zoom and fade animations */
 
-.leaflet-fade-anim .leaflet-popup {
+:where(.wayfarer-view) .leaflet-fade-anim .leaflet-popup {
 	opacity: 0;
 	transition: opacity 0.2s linear;
 }
 
-.leaflet-fade-anim .leaflet-map-pane .leaflet-popup {
+:where(.wayfarer-view) .leaflet-fade-anim .leaflet-map-pane .leaflet-popup {
 	opacity: 1;
 }
 
-.leaflet-zoom-animated {
+:where(.wayfarer-view) .leaflet-zoom-animated {
 	transform-origin: 0 0;
 }
 
-svg.leaflet-zoom-animated {
+:where(.wayfarer-view) svg.leaflet-zoom-animated {
 	will-change: transform;
 }
 
-.leaflet-zoom-anim .leaflet-zoom-animated {
+:where(.wayfarer-view) .leaflet-zoom-anim .leaflet-zoom-animated {
 	transition:         transform 0.25s cubic-bezier(0,0,0.25,1);
 }
 
-.leaflet-zoom-anim .leaflet-tile,
-.leaflet-pan-anim .leaflet-tile {
+:where(.wayfarer-view) .leaflet-zoom-anim .leaflet-tile,
+:where(.wayfarer-view) .leaflet-pan-anim .leaflet-tile {
 	transition: none;
 }
 
-.leaflet-zoom-anim .leaflet-zoom-hide {
+:where(.wayfarer-view) .leaflet-zoom-anim .leaflet-zoom-hide {
 	visibility: hidden;
 }
 
 /* cursors */
 
-.leaflet-interactive {
+:where(.wayfarer-view) .leaflet-interactive {
 	cursor: pointer;
 }
 
-.leaflet-grab {
+:where(.wayfarer-view) .leaflet-grab {
 	cursor:         grab;
 }
 
-.leaflet-crosshair,
-.leaflet-crosshair .leaflet-interactive {
+:where(.wayfarer-view) .leaflet-crosshair,
+:where(.wayfarer-view) .leaflet-crosshair .leaflet-interactive {
 	cursor: crosshair;
 }
 
-.leaflet-popup-pane,
-.leaflet-control {
+:where(.wayfarer-view) .leaflet-popup-pane,
+:where(.wayfarer-view) .leaflet-control {
 	cursor: auto;
 }
 
-.leaflet-dragging .leaflet-grab,
-.leaflet-dragging .leaflet-grab .leaflet-interactive,
-.leaflet-dragging .leaflet-marker-draggable {
+.leaflet-dragging :where(.wayfarer-view) .leaflet-grab,
+.leaflet-dragging :where(.wayfarer-view) .leaflet-grab .leaflet-interactive,
+.leaflet-dragging :where(.wayfarer-view) .leaflet-marker-draggable {
 	cursor:         grabbing;
 }
 
 /* marker & overlays interactivity */
-.leaflet-marker-icon,
-.leaflet-marker-shadow,
-.leaflet-image-layer,
-.leaflet-pane > svg path,
-.leaflet-tile-container {
+:where(.wayfarer-view) .leaflet-marker-icon,
+:where(.wayfarer-view) .leaflet-marker-shadow,
+:where(.wayfarer-view) .leaflet-image-layer,
+:where(.wayfarer-view) .leaflet-pane > svg path,
+:where(.wayfarer-view) .leaflet-tile-container {
 	pointer-events: none;
 }
 
-.leaflet-marker-icon.leaflet-interactive,
-.leaflet-image-layer.leaflet-interactive,
-.leaflet-pane > svg path.leaflet-interactive,
-svg.leaflet-image-layer.leaflet-interactive path {
+:where(.wayfarer-view) .leaflet-marker-icon.leaflet-interactive,
+:where(.wayfarer-view) .leaflet-image-layer.leaflet-interactive,
+:where(.wayfarer-view) .leaflet-pane > svg path.leaflet-interactive,
+:where(.wayfarer-view) svg.leaflet-image-layer.leaflet-interactive path {
 	pointer-events: auto;
 }
 
 /* visual tweaks */
 
-.leaflet-container {
+:where(.wayfarer-view) .leaflet-container {
 	background: #ddd;
 	outline-offset: 1px;
 }
 
-.leaflet-container a {
+:where(.wayfarer-view) .leaflet-container a {
 	color: #0078A8;
 }
 
-.leaflet-zoom-box {
+:where(.wayfarer-view) .leaflet-zoom-box {
 	border: 2px dotted #38f;
 	background: rgb(255 255 255 / 50%);
 }
 
 /* general typography */
-.leaflet-container {
+:where(.wayfarer-view) .leaflet-container {
 	font-family: "Helvetica Neue", Arial, Helvetica, sans-serif;
 	font-size: 0.75rem;
 	line-height: 1.5;
@@ -308,12 +314,12 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
 /* general toolbar styles */
 
-.leaflet-bar {
+:where(.wayfarer-view) .leaflet-bar {
 	box-shadow: 0 1px 5px rgb(0 0 0 / 65%);
 	border-radius: 4px;
 }
 
-.leaflet-bar a {
+:where(.wayfarer-view) .leaflet-bar a {
 	background-color: #fff;
 	border-bottom: 1px solid #ccc;
 	width: 26px;
@@ -325,150 +331,144 @@ svg.leaflet-image-layer.leaflet-interactive path {
 	color: #000;
 }
 
-.leaflet-bar a,
-.leaflet-control-layers-toggle {
+:where(.wayfarer-view) .leaflet-bar a,
+:where(.wayfarer-view) .leaflet-control-layers-toggle {
 	background-position: 50% 50%;
 	background-repeat: no-repeat;
 	display: block;
 }
 
-.leaflet-bar a:hover,
-.leaflet-bar a:focus {
+:where(.wayfarer-view) .leaflet-bar a:hover,
+:where(.wayfarer-view) .leaflet-bar a:focus {
 	background-color: #f4f4f4;
 }
 
-.leaflet-bar a:first-child {
+:where(.wayfarer-view) .leaflet-bar a:first-child {
 	border-top-left-radius: 4px;
 	border-top-right-radius: 4px;
 }
 
-.leaflet-bar a:last-child {
+:where(.wayfarer-view) .leaflet-bar a:last-child {
 	border-bottom-left-radius: 4px;
 	border-bottom-right-radius: 4px;
 	border-bottom: none;
 }
 
-.leaflet-bar a.leaflet-disabled {
+:where(.wayfarer-view) .leaflet-bar a.leaflet-disabled {
 	cursor: default;
 	background-color: #f4f4f4;
 	color: #bbb;
 }
 
-.leaflet-touch .leaflet-bar a {
+:where(.wayfarer-view) .leaflet-touch .leaflet-bar a {
 	width: 30px;
 	height: 30px;
 	line-height: 30px;
 }
 
-.leaflet-touch .leaflet-bar a:first-child {
+:where(.wayfarer-view) .leaflet-touch .leaflet-bar a:first-child {
 	border-top-left-radius: 2px;
 	border-top-right-radius: 2px;
 }
 
-.leaflet-touch .leaflet-bar a:last-child {
+:where(.wayfarer-view) .leaflet-touch .leaflet-bar a:last-child {
 	border-bottom-left-radius: 2px;
 	border-bottom-right-radius: 2px;
 }
 
 /* zoom control */
 
-.leaflet-control-zoom-in,
-.leaflet-control-zoom-out {
+:where(.wayfarer-view) .leaflet-control-zoom-in,
+:where(.wayfarer-view) .leaflet-control-zoom-out {
 	font: bold 18px 'Lucida Console', Monaco, monospace;
 }
 
-.leaflet-touch .leaflet-control-zoom-in, .leaflet-touch .leaflet-control-zoom-out  {
+:where(.wayfarer-view) .leaflet-touch .leaflet-control-zoom-in, :where(.wayfarer-view) .leaflet-touch .leaflet-control-zoom-out  {
 	font-size: 22px;
 }
 
 /* layers control */
 
-.leaflet-control-layers {
+:where(.wayfarer-view) .leaflet-control-layers {
 	box-shadow: 0 1px 5px rgb(0 0 0 / 40%);
 	background: #fff;
 	border-radius: 5px;
 }
 
-.leaflet-control-layers-toggle {
+:where(.wayfarer-view) .leaflet-control-layers-toggle {
 	background-image: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
 	width: 36px;
 	height: 36px;
 }
 
-.leaflet-retina .leaflet-control-layers-toggle {
+:where(.wayfarer-view) .leaflet-retina .leaflet-control-layers-toggle {
 	background-image: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
 	background-size: 26px 26px;
 }
 
-.leaflet-touch .leaflet-control-layers-toggle {
+:where(.wayfarer-view) .leaflet-touch .leaflet-control-layers-toggle {
 	width: 44px;
 	height: 44px;
 }
 
-.leaflet-control-layers .leaflet-control-layers-list,
-.leaflet-control-layers-expanded .leaflet-control-layers-toggle {
+:where(.wayfarer-view) .leaflet-control-layers .leaflet-control-layers-list,
+:where(.wayfarer-view) .leaflet-control-layers-expanded .leaflet-control-layers-toggle {
 	display: none;
 }
 
-.leaflet-control-layers-expanded .leaflet-control-layers-list {
+:where(.wayfarer-view) .leaflet-control-layers-expanded .leaflet-control-layers-list {
 	display: block;
 	position: relative;
 }
 
-.leaflet-control-layers-expanded {
+:where(.wayfarer-view) .leaflet-control-layers-expanded {
 	padding: 6px 10px 6px 6px;
 	color: #333;
 	background: #fff;
 }
 
-.leaflet-control-layers-scrollbar {
+:where(.wayfarer-view) .leaflet-control-layers-scrollbar {
 	overflow: hidden scroll;
 	padding-right: 5px;
 }
 
-.leaflet-control-layers-selector {
+:where(.wayfarer-view) .leaflet-control-layers-selector {
 	margin-top: 2px;
 	position: relative;
 	top: 1px;
 }
 
-.leaflet-control-layers label {
+:where(.wayfarer-view) .leaflet-control-layers label {
 	display: block;
 	font-size: 1.0833em;
 }
 
-.leaflet-control-layers-separator {
+:where(.wayfarer-view) .leaflet-control-layers-separator {
 	height: 0;
 	border-top: 1px solid #ddd;
 	margin: 5px -10px 5px -6px;
 }
 
-/* Default icon URLs */
-.leaflet-default-icon-path {
-	/* used only in path-guessing heuristic, see L.Icon.Default */
-	background-image: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
-}
-
 /* attribution and scale controls */
 
-.leaflet-container .leaflet-control-attribution {
+:where(.wayfarer-view) .leaflet-container .leaflet-control-attribution {
 	background: rgb(255 255 255 / 80%);
 	margin: 0;
 }
 
-.leaflet-control-attribution,
-.leaflet-control-scale-line {
+:where(.wayfarer-view) .leaflet-control-attribution,
+:where(.wayfarer-view) .leaflet-control-scale-line {
 	padding: 0 5px;
 	color: #333;
 	line-height: 1.4;
 }
 
-.leaflet-control-attribution a {
+:where(.wayfarer-view) .leaflet-control-attribution a {
 	text-decoration: none;
 }
 
-.leaflet-control-attribution a:hover,
-.leaflet-control-attribution a:focus {
+:where(.wayfarer-view) .leaflet-control-attribution a:hover,
+:where(.wayfarer-view) .leaflet-control-attribution a:focus {
 	text-decoration: underline;
 }
 
@@ -479,15 +479,15 @@ svg.leaflet-image-layer.leaflet-interactive path {
 	height: 0.6669em;
 }
 
-.leaflet-left .leaflet-control-scale {
+:where(.wayfarer-view) .leaflet-left .leaflet-control-scale {
 	margin-left: 5px;
 }
 
-.leaflet-bottom .leaflet-control-scale {
+:where(.wayfarer-view) .leaflet-bottom .leaflet-control-scale {
 	margin-bottom: 5px;
 }
 
-.leaflet-control-scale-line {
+:where(.wayfarer-view) .leaflet-control-scale-line {
 	border: 2px solid #777;
 	border-top: none;
 	line-height: 1.1;
@@ -498,54 +498,54 @@ svg.leaflet-image-layer.leaflet-interactive path {
 	text-shadow: 1px 1px #fff;
 }
 
-.leaflet-control-scale-line:not(:first-child) {
+:where(.wayfarer-view) .leaflet-control-scale-line:not(:first-child) {
 	border-top: 2px solid #777;
 	border-bottom: none;
 	margin-top: -2px;
 }
 
-.leaflet-control-scale-line:not(:first-child, :last-child) {
+:where(.wayfarer-view) .leaflet-control-scale-line:not(:first-child, :last-child) {
 	border-bottom: 2px solid #777;
 }
 
-.leaflet-touch .leaflet-control-attribution,
-.leaflet-touch .leaflet-control-layers,
-.leaflet-touch .leaflet-bar {
+:where(.wayfarer-view) .leaflet-touch .leaflet-control-attribution,
+:where(.wayfarer-view) .leaflet-touch .leaflet-control-layers,
+:where(.wayfarer-view) .leaflet-touch .leaflet-bar {
 	box-shadow: none;
 }
 
-.leaflet-touch .leaflet-control-layers,
-.leaflet-touch .leaflet-bar {
+:where(.wayfarer-view) .leaflet-touch .leaflet-control-layers,
+:where(.wayfarer-view) .leaflet-touch .leaflet-bar {
 	border: 2px solid rgb(0 0 0 / 20%);
 	background-clip: padding-box;
 }
 
 /* popup */
 
-.leaflet-popup {
+:where(.wayfarer-view) .leaflet-popup {
 	position: absolute;
 	text-align: center;
 	margin-bottom: 20px;
 }
 
-.leaflet-popup-content-wrapper {
+:where(.wayfarer-view) .leaflet-popup-content-wrapper {
 	padding: 1px;
 	text-align: left;
 	border-radius: 12px;
 }
 
-.leaflet-popup-content {
+:where(.wayfarer-view) .leaflet-popup-content {
 	margin: 13px 24px 13px 20px;
 	line-height: 1.3;
 	font-size: 1.0833em;
 	min-height: 1px;
 }
 
-.leaflet-popup-content p {
+:where(.wayfarer-view) .leaflet-popup-content p {
 	margin: 1.3em 0;
 }
 
-.leaflet-popup-tip-container {
+:where(.wayfarer-view) .leaflet-popup-tip-container {
 	width: 40px;
 	height: 20px;
 	position: absolute;
@@ -556,7 +556,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 	pointer-events: none;
 }
 
-.leaflet-popup-tip {
+:where(.wayfarer-view) .leaflet-popup-tip {
 	width: 17px;
 	height: 17px;
 	padding: 1px;
@@ -565,14 +565,14 @@ svg.leaflet-image-layer.leaflet-interactive path {
 	transform: rotate(45deg);
 }
 
-.leaflet-popup-content-wrapper,
-.leaflet-popup-tip {
+:where(.wayfarer-view) .leaflet-popup-content-wrapper,
+:where(.wayfarer-view) .leaflet-popup-tip {
 	background: #fff;
 	color: #333;
 	box-shadow: 0 3px 14px rgb(0 0 0 / 40%);
 }
 
-.leaflet-container a.leaflet-popup-close-button {
+:where(.wayfarer-view) .leaflet-container a.leaflet-popup-close-button {
 	position: absolute;
 	top: 0;
 	right: 0;
@@ -586,35 +586,35 @@ svg.leaflet-image-layer.leaflet-interactive path {
 	background: transparent;
 }
 
-.leaflet-container a.leaflet-popup-close-button:hover,
-.leaflet-container a.leaflet-popup-close-button:focus {
+:where(.wayfarer-view) .leaflet-container a.leaflet-popup-close-button:hover,
+:where(.wayfarer-view) .leaflet-container a.leaflet-popup-close-button:focus {
 	color: #585858;
 }
 
-.leaflet-popup-scrolled {
+:where(.wayfarer-view) .leaflet-popup-scrolled {
 	overflow: auto;
 }
 
-.leaflet-oldie .leaflet-popup-content-wrapper {
+:where(.wayfarer-view) .leaflet-oldie .leaflet-popup-content-wrapper {
 	-ms-zoom: 1;
 }
 
-.leaflet-oldie .leaflet-popup-tip {
+:where(.wayfarer-view) .leaflet-oldie .leaflet-popup-tip {
 	width: 24px;
 	margin: 0 auto;
 	filter: "progid:DXImageTransform.Microsoft.Matrix(M11=0.7071, M12=0.7071, M21=-0.7071, M22=0.7071)";
 }
 
-.leaflet-oldie .leaflet-control-zoom,
-.leaflet-oldie .leaflet-control-layers,
-.leaflet-oldie .leaflet-popup-content-wrapper,
-.leaflet-oldie .leaflet-popup-tip {
+:where(.wayfarer-view) .leaflet-oldie .leaflet-control-zoom,
+:where(.wayfarer-view) .leaflet-oldie .leaflet-control-layers,
+:where(.wayfarer-view) .leaflet-oldie .leaflet-popup-content-wrapper,
+:where(.wayfarer-view) .leaflet-oldie .leaflet-popup-tip {
 	border: 1px solid #999;
 }
 
 /* div icon */
 
-.leaflet-div-icon {
+:where(.wayfarer-view) .leaflet-div-icon {
 	background: #fff;
 	border: 1px solid #666;
 }
@@ -622,7 +622,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 /* Tooltip */
 
 /* Base styles for the element that has a tooltip */
-.leaflet-tooltip {
+:where(.wayfarer-view) .leaflet-tooltip {
 	position: absolute;
 	padding: 6px;
 	background-color: #fff;
@@ -635,15 +635,15 @@ svg.leaflet-image-layer.leaflet-interactive path {
 	box-shadow: 0 1px 3px rgb(0 0 0 / 40%);
 }
 
-.leaflet-tooltip.leaflet-interactive {
+:where(.wayfarer-view) .leaflet-tooltip.leaflet-interactive {
 	cursor: pointer;
 	pointer-events: auto;
 }
 
-.leaflet-tooltip-top::before,
-.leaflet-tooltip-bottom::before,
-.leaflet-tooltip-left::before,
-.leaflet-tooltip-right::before {
+:where(.wayfarer-view) .leaflet-tooltip-top::before,
+:where(.wayfarer-view) .leaflet-tooltip-bottom::before,
+:where(.wayfarer-view) .leaflet-tooltip-left::before,
+:where(.wayfarer-view) .leaflet-tooltip-right::before {
 	position: absolute;
 	pointer-events: none;
 	border: 6px solid transparent;
@@ -653,54 +653,54 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
 /* Directions */
 
-.leaflet-tooltip-bottom {
+:where(.wayfarer-view) .leaflet-tooltip-bottom {
 	margin-top: 6px;
 }
 
-.leaflet-tooltip-top {
+:where(.wayfarer-view) .leaflet-tooltip-top {
 	margin-top: -6px;
 }
 
-.leaflet-tooltip-bottom::before,
-.leaflet-tooltip-top::before {
+:where(.wayfarer-view) .leaflet-tooltip-bottom::before,
+:where(.wayfarer-view) .leaflet-tooltip-top::before {
 	left: 50%;
 	margin-left: -6px;
 }
 
-.leaflet-tooltip-top::before {
+:where(.wayfarer-view) .leaflet-tooltip-top::before {
 	bottom: 0;
 	margin-bottom: -12px;
 	border-top-color: #fff;
 }
 
-.leaflet-tooltip-bottom::before {
+:where(.wayfarer-view) .leaflet-tooltip-bottom::before {
 	top: 0;
 	margin-top: -12px;
 	margin-left: -6px;
 	border-bottom-color: #fff;
 }
 
-.leaflet-tooltip-left {
+:where(.wayfarer-view) .leaflet-tooltip-left {
 	margin-left: -6px;
 }
 
-.leaflet-tooltip-right {
+:where(.wayfarer-view) .leaflet-tooltip-right {
 	margin-left: 6px;
 }
 
-.leaflet-tooltip-left::before,
-.leaflet-tooltip-right::before {
+:where(.wayfarer-view) .leaflet-tooltip-left::before,
+:where(.wayfarer-view) .leaflet-tooltip-right::before {
 	top: 50%;
 	margin-top: -6px;
 }
 
-.leaflet-tooltip-left::before {
+:where(.wayfarer-view) .leaflet-tooltip-left::before {
 	right: 0;
 	margin-right: -12px;
 	border-left-color: #fff;
 }
 
-.leaflet-tooltip-right::before {
+:where(.wayfarer-view) .leaflet-tooltip-right::before {
 	left: 0;
 	margin-left: -12px;
 	border-right-color: #fff;
@@ -710,7 +710,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
 @media print {
 	/* Prevent printers from removing background-images of controls. */
-	.leaflet-control {
+	:where(.wayfarer-view) .leaflet-control {
 	-webkit-print-color-adjust: exact;
 	print-color-adjust: exact;
 }

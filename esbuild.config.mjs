@@ -30,6 +30,10 @@ const context = await esbuild.context({
     ...builtinModules,
     ...builtinModules.map((m) => `node:${m}`),
   ],
+  // Leaflet's default (UMD) build always assigns itself to window.L, which
+  // replaces the Leaflet instance other plugins rely on (Map View's Geoman
+  // reads the global). The ESM build exports the same API without the global.
+  alias: { leaflet: "leaflet/dist/leaflet-src.esm.js" },
   format: "cjs",
   target: "es2020",
   logLevel: "info",
