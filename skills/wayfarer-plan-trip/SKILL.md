@@ -23,7 +23,7 @@ Do not stall on missing answers. Plan on stated assumptions and put each one in 
 
 For every candidate place:
 
-- **Coordinates.** From the place's Google Maps page (the `!3d…!4d…` pair in the URL, or the pin), 4 to 6 decimals. When you have the original Google Maps place URL, keep it in the note for the user to convert with **Convert every map link in this note** in Obsidian. Conversion keeps the original clickable place URL and saves coordinates separately. Use a `geo:` link when you have verified coordinates but no original place URL. Never guess numbers; never write a search URL (`?q=name`), it has no pin.
+- **Coordinates.** From the place's Google Maps page (the `!3d…!4d…` pair in the URL, or the pin), 4 to 6 decimals. When you have the original Google Maps place URL, keep it in the note for the user to convert with **Convert every map link in this note** in Obsidian. Conversion keeps the original clickable place URL and saves coordinates separately. Use a `geo:` link when you have verified coordinates but no original place URL. Never guess numbers; never write a search URL (`?q=name`), it has no pin. If you cannot open the Maps page, take the pair from another source that publishes it (OpenStreetMap, Wikipedia, the venue's own site) and say so under `### Recheck before you go`. If you still cannot verify a place, do not make it a stop: name it in a recheck line and let the user paste its link.
 - **Opening days and hours, last entry, seasonal closure.** The single most common planning error is a museum, temple hall, shop or restaurant closed on the planned weekday. Check the weekday of every visit.
 - **Getting there and back.** Which bus or train, how often it runs, first and last departures that matter (last bus down the mountain, last ferry), whether a pass covers it, how long it takes.
 - **Time needed on site**, and the cost of tickets.
@@ -62,8 +62,8 @@ Tick a line only when the user said it is done. Bookings already confirmed go in
 ```
 
 - Time first, only when the stop has a fixed time (departure, entry slot, last entry).
-- A transport emoji before the link only when the user said how they get there or it follows from the plan (🚶 🚲 🚗 🚕 🚌 🚆 🚇 🚊 ⛴️ ✈️). The plugin routes that leg and draws it. Do not guess a mode; leave it out and the user picks it on the map.
-- A category emoji before the link when the name does not say what it is (🍜 food, ☕ cafe, 🏨 stay, ⛩️ shrine, 🛕 temple, 🖼️ museum, 🏞️ nature, ♨️ onsen, 🛍️ shop, 🚉 station, 🛬 airport, ⚓ port, 🔭 view, 🏯 castle, 🎭 event).
+- A transport emoji before the link only when the user said how they get there or it follows from the plan (🚶 🚲 🚗 🚕 🚌 🚆 🚇 🚊 ⛴️ ✈️). The plugin routes that leg and draws it. Do not guess a mode; leave it out and the user picks it on the map. A leg runs from the stop before it on the same day, so the first stop of a day gets none. To show the morning ride, start the day with where the user wakes up.
+- A category emoji before the link, after the transport emoji if there is one, when the name does not say what it is (🍜 food, ☕ cafe, 🏨 stay, ⛩️ shrine, 🛕 temple, 🖼️ museum, 🏞️ nature, ♨️ onsen, 🛍️ shop, 🚉 station, 🛬 airport, ⚓ port, 🔭 view, 🏯 castle, 🎭 event).
 - The rest of the line is the one-line remark: why go, what to order, the catch (`last entry 16:30`, `closed Mondays`, `cash only`). Longer notes go on indented lines directly below; the plugin shows them verbatim on the stop's card. **This is where the detail for a day lives**, including the fallback times, the local rules and the thing that will go wrong.
 - A day heading can carry a short paragraph under it for what applies to the whole day (a weather call, a warning, the shape of the day). Keep it to a few lines.
 - Names in the script the user will see on signs, optionally followed by a familiar name.
@@ -75,7 +75,7 @@ Write in the user's language. Keep sentences short and concrete; the user reads 
 
 ## 5. Hand back
 
-Keep the handback brief. Open the note with the Wayfarer map beside it; run **Convert every map link in this note** for any URLs you left. With a Google API key, **Fetch Google details for stops without them** adds hours and photos. Choose transport on the desktop timeline arrows or via **Change transport** in a stop’s details on mobile. Start with the to-do list, unbooked nights first. Point out red legs (two written times too close for the leg between them), "closed that day" chips, and what you could not confirm.
+Keep the handback brief. Open the note with the Wayfarer map beside it; run **Convert every map link in this note** for any URLs you left. With a Google API key, **Fetch Google details for stops without them** adds hours and photos. It also checks your coordinates: a stop it reports as "not found at the pin" has no place of that name within 300 m, so its coordinates are probably wrong. Choose transport on the desktop timeline arrows or via **Change transport** in a stop’s details on mobile. Start with the to-do list, unbooked nights first. Point out red legs (two written times too close for the leg between them), "closed that day" chips, and what you could not confirm.
 
 ## Rules
 

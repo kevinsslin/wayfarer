@@ -49,11 +49,11 @@ Not planned day by day yet. Staying in the city over the long weekend.
 | `[Name](geo:lat,lng)` | A coordinate-only stop. Same format as the Map View plugin. |
 | `[Name](Google Maps URL)` with saved coordinate metadata | An imported stop whose name still opens the original Google Maps place. The plugin writes the coordinate metadata during conversion. |
 | `07:53` at line start | The stop's time, local time at that place. |
-| Transport emoji before the link | How you get there: 🚶 walk, 🚲 bike, 🚗 car, 🚕 taxi, 🚌 bus, 🚆 🚄 🚃 train, 🚇 metro, 🚊 tram, ⛴️ boat, ✈️ flight. Words are not read. Picking a transport on a desktop timeline arrow or via **Change transport** in a stop’s details writes this emoji before the link (replacing the one there). It is the only place the transport lives. |
+| Transport emoji before the link | How you get there: 🚶 walk, 🚲 bike, 🚗 car, 🚕 taxi, 🚌 bus, 🚆 🚄 🚃 train, 🚇 metro, 🚊 tram, ⛴️ boat, ✈️ flight. Words are not read. Picking a transport on a desktop timeline arrow or via **Change transport** in a stop’s details writes this emoji before the link (replacing the one there). It is the only place the transport lives. A leg runs from the previous stop of the same day, so the first stop of a day has none and nothing is drawn between days. |
 | Indented lines under a stop | The stop's notes, shown verbatim on its card and popup. No format inside them is interpreted: a `geo:` link there is text, not another stop. |
 | `- [ ] 07:53 [Name](geo:…)` | A task line is a stop like any other; the box is not shown in the note text. |
 | `%% … %%` | An Obsidian comment. Links inside it are not stops. |
-| Category emoji before the link | The pin's icon. Otherwise from the Google type or the name. Airports are 🛬 and ports ⚓ so they never read as a flight or boat leg. |
+| Category emoji before the link | The pin's icon, written before or after the transport emoji. Otherwise from the Google type or the name. Airports are 🛬 and ports ⚓ so they never read as a flight or boat leg. |
 | Rest of the line | Shown as the remark in the stop's card. |
 | `![[img.jpg]]` or image URL on the line or the next | Photo in the card. |
 | `%%wf:{…}%%` after a link | Plugin metadata: Google details (rating, hours, address, photo, UTC offset) and the last routed leg. Includes coordinates for imported Google Maps links. Written by the plugin, never by hand. Leave it as is. |

@@ -18,7 +18,7 @@ export interface ResolvedPlace {
 }
 
 export interface ResolveDeps {
-  /** Follows redirects of a short link and returns the final URL. Undefined where unsupported (mobile). */
+  /** Follows redirects of a short link and returns the final URL. Undefined when the host cannot make the request. */
   expandShortUrl?: (url: string) => Promise<string>;
   /** Google Places (New) lookups. Undefined when no API key is configured. */
   places?: {
