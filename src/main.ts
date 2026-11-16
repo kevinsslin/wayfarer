@@ -252,16 +252,34 @@ export default class WayfarerPlugin extends Plugin {
 
   /**
    * The note the map should show: the active markdown view, or, when the
-   * active leaf is the map pane itself (as it is right after startup or a
-   * click on the map), the most recently used markdown leaf.
+   * active leaf is something else (the map pane itself, settings), the note
+   * the map already shows. On a phone or tablet the map is a tab or split in
+   * the main area, so the most recently used leaf there is the map, not the
+   * note; taking the first markdown tab instead swapped in an unrelated note.
+   * Only before any note is shown (a map restored at startup) does it fall
+   * back to the most recently opened note.
    */
   private activeMarkdown(): MarkdownView | null {
-    const active = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const workspace = this.app.workspace;
+    const active = workspace.getActiveViewOfType(MarkdownView);
     if (active) return active;
-    const recent = this.app.workspace.getMostRecentLeaf();
-    if (recent?.view instanceof MarkdownView) return recent.view;
-    const first = this.app.workspace.getLeavesOfType("markdown")[0];
-    return first?.view instanceof MarkdownView ? first.view : null;
+    const shown = this.current?.file.path ?? null;
+    const recent = workspace.getMostRecentLeaf()?.view;
+    if (recent instanceof MarkdownView && recent.file && (shown === null || recent.file.path === shown)) return recent;
+    const views = workspace.getLeavesOfType("markdown")
+      .map((leaf) => leaf.view)
+      .filter((view): view is MarkdownView => view instanceof MarkdownView && !!view.file);
+    if (shown !== null) return views.find((view) => view.file?.path === shown) ?? null;
+    if (views.length <= 1) return views[0] ?? null;
+    const opened = workspace.getLastOpenFiles();
+    const rank = (view: MarkdownView) => { const i = opened.indexOf(view.file?.path ?? ""); return i < 0 ? opened.length : i; };
+    return views.sort((a, b) => rank(a) - rank(b))[0] ?? null;
+  }
+
+  /** The editor holding the note the map shows, for writes chosen on the map; null when that note is not open. */
+  private shownMarkdown(): MarkdownView | null {
+    const md = this.activeMarkdown();
+    return md?.file && md.file.path === this.current?.file.path ? md : null;
   }
 
   /* ---------- export ---------- */
@@ -355,7 +373,7 @@ export default class WayfarerPlugin extends Plugin {
 
   /** Writes the transport picked in the pane as the emoji before the stop's link, so the text says what the map says. */
   setStopTransport(stop: Stop, mode: Transport): void {
-    const md = this.activeMarkdown();
+    const md = this.shownMarkdown();
     if (!md) return;
     // The link must still be where the pane saw it; otherwise the note changed under us.
     void this.rewriteLine(md, stop.line, (text) => (stopStillAt(text, stop) ? setTransportOnLine(text, stop, mode) : text));
@@ -399,7 +417,8 @@ export default class WayfarerPlugin extends Plugin {
 
   /** Moves the stop line at `from` to sit where `to` is (before it when moving up, after it when moving down). */
   async moveStopLine(from: number, to: number): Promise<void> {
-    const md = this.activeMarkdown();
+    // Line numbers come from the map's note; they must never reorder another one.
+    const md = this.shownMarkdown();
     if (!md || this.unloaded) return;
     if (md.getMode() === "preview" && md.file) {
       // Reading view: the hidden editor is not saved, so reorder the file itself.
