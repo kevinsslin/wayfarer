@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.14] - 2026-11-24
 
 - The `%%wf:{…}%%` metadata comment closes where it ends in the editor. A saved Google Maps link or website could run into the closing `%%`, because Obsidian reads a bare URL up to the next space, which left the comment open and dimmed the text after it. Metadata is now written with a space before its closing brace, and a `%%` inside a saved value is escaped. Running a conversion again leaves an already converted stop alone instead of converting the URL saved in its metadata. Older notes switch over the next time Wayfarer rewrites that stop, and older Wayfarer versions still read the new form. ([#8](https://github.com/kevinsslin/wayfarer/issues/8))
 - Writes that wait on something (a drag, a menu, Google) land only on the stop they were made for. A timeline drag moves nothing if either stop's line changed before the drop, and an editor drag is one undo step. Transport and fetched details are not written to a stop renamed in the meantime, or to another note's map. A late route is dropped when its stop moved and the same leg is on another day. A pending link conversion takes only its own URL, not a copy of the link on a nearby line or the start of a longer URL still being typed.
