@@ -12,6 +12,11 @@ describe("isGoogleMapsUrl", () => {
   it("rejects other links and plain text", () => {
     expect(isGoogleMapsUrl("https://www.google.com/search?q=maps")).toBe(false);
     expect(isGoogleMapsUrl("https://example.com/maps/place/x")).toBe(false);
+    expect(isGoogleMapsUrl("https://maps.google.example.com/maps/place/x/@1,2,15z")).toBe(false);
+    expect(isGoogleMapsUrl("https://www.google.example.com/maps/place/x/@1,2,15z")).toBe(false);
+    expect(isGoogleMapsUrl("https://notgoogle.com/maps/place/x")).toBe(false);
+    expect(isGoogleMapsUrl("https://www.google.com.tw/maps/place/x")).toBe(true);
+    expect(isGoogleMapsUrl("https://maps.google.de/maps?q=1,2")).toBe(true);
     expect(isGoogleMapsUrl("千光寺 尾道")).toBe(false);
   });
   it("flags only short hosts as short", () => {

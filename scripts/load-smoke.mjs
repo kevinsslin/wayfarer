@@ -190,9 +190,10 @@ md.editor = {
   getCursor: () => ({ line: 1, ch: 0 }),
   replaceRange: (text, from, to) => {
     const lines = source.split("\n");
-    lines[from.line] = lines[from.line].slice(0, from.ch) + text + lines[to.line].slice(to.ch);
+    lines.splice(from.line, to.line - from.line + 1, ...(lines[from.line].slice(0, from.ch) + text + lines[to.line].slice(to.ch)).split("\n"));
     source = lines.join("\n");
   },
+  setCursor: () => {},
 };
 app.workspace.getActiveViewOfType = () => md;
 app.workspace.getLeavesOfType = (type) => type === "markdown" ? [{ view: md }] : [];
@@ -241,7 +242,7 @@ for (const bulk of [false, true]) {
   obsidianStub.requestUrl = () => new Promise((resolve) => { resolveRequest = resolve; });
   const url = "https://www.google.com/maps/place/Hotel/@35,139,17z";
   openNote("A.md", "## 2027-01-01\n- " + url);
-  const pending = bulk ? plugin.convertAll(md.editor) : plugin.convert(md.editor, 1, url);
+  const pending = bulk ? plugin.convertAll(md.editor) : plugin.convert(md.editor, 1, url, "- ");
   openNote("B.md", "## 2027-01-01\n- " + url);
   resolveRequest(details);
   await pending;
@@ -271,7 +272,7 @@ for (const apiKey of ["", "smoke-key"]) {
   obsidianStub.requestUrl = async () => { requests++; return details; };
   const url = "https://www.google.com/maps/place/Hotel/@35,139,17z";
   openNote("A.md", `## 2027-01-01\n- [My $& hotel](${url})`);
-  assert(await plugin.convert(md.editor, 1, url), "place link converts to a mapped stop");
+  assert(await plugin.convert(md.editor, 1, url, "- [My $& hotel]("), "place link converts to a mapped stop");
   assert(source.includes(`[My $& hotel](${url})`) && !source.includes("geo:"), "original href and user label survive conversion");
   plugin.refresh();
   const stop = plugin.current.itinerary.stops[0];
@@ -320,7 +321,7 @@ obsidianStub.Platform.isMobile = true;
 const shortUrl = "https://maps.app.goo.gl/cafe";
 obsidianStub.requestUrl = async () => ({ status: 200, text: '<link rel="canonical" href="https://www.google.com/maps/place/Cafe/data=!3d35!4d139">' });
 openNote("A.md", `## 2027-01-01\n- ${shortUrl}`);
-assert(await plugin.convert(md.editor, 1, shortUrl), "short links resolve through requestUrl on mobile without Node");
+assert(await plugin.convert(md.editor, 1, shortUrl, "- "), "short links resolve through requestUrl on mobile without Node");
 plugin.refresh();
 assert(plugin.current.itinerary.stops[0]?.url === shortUrl, "mobile short-link conversion keeps the original business href");
 obsidianStub.Platform.isMobile = false;
@@ -350,7 +351,7 @@ console.log("smoke: OK (original Maps href, keyless import, transport, repeat co
   app.workspace.getLastOpenFiles = () => [];
   plugin.refresh();
   assert(plugin.current.file.path === "Trip.md", "focusing the map tab keeps its note instead of the first markdown tab");
-  await plugin.moveStopLine(2, 1);
+  await plugin.moveStopLine(plugin.current.itinerary.stops[1], plugin.current.itinerary.stops[0], "Trip.md");
   assert(source.split("\n")[1].includes("Shrine") && !mobileWrites.includes("Other.md"), "reordering on a focused map edits the map's note only");
   plugin.setStopTransport(plugin.current.itinerary.stops[1], "walk");
   await Promise.resolve();
@@ -360,7 +361,7 @@ console.log("smoke: OK (original Maps href, keyless import, transport, repeat co
   plugin.refresh();
   assert(plugin.current.file.path === "Trip.md", "closing the map's note does not swap in another note");
   const otherBefore = texts.get("Other.md");
-  await plugin.moveStopLine(2, 1);
+  await plugin.moveStopLine(plugin.current.itinerary.stops[1], plugin.current.itinerary.stops[0], "Trip.md");
   plugin.setStopTransport(plugin.current.itinerary.stops[0], "car");
   await Promise.resolve();
   assert(texts.get("Other.md") === otherBefore && !mobileWrites.includes("Other.md"), "map writes never reach a note the map does not show");
@@ -376,6 +377,63 @@ console.log("smoke: OK (original Maps href, keyless import, transport, repeat co
   md.getMode = saved.mode;
 }
 console.log("smoke: OK (map tab keeps its note on phones and tablets)");
+
+// Writes computed from an earlier parse land only on the stop they were computed for.
+const deferredVault = app.vault;
+app.vault = { process: async (file, transform) => { source = transform(source); } };
+for (const mode of ["preview", "source"]) {
+  md.getMode = () => mode;
+  const trip = "## 2027-01-01\n- [A](geo:35,139)\n- [B](geo:35.1,139.1)\n- [C](geo:35.2,139.2)";
+  openNote("A.md", trip);
+  let [a, , c] = plugin.current.itinerary.stops;
+  source = trip.replace("## 2027-01-01\n", "## 2027-01-01\nCall the hotel\n"); // a sync lands before the drop
+  const synced = source;
+  await plugin.moveStopLine(a, c, "A.md");
+  assert(source === synced, `${mode}: a drag computed before an edit moves nothing`);
+  openNote("A.md", trip);
+  [a, , c] = plugin.current.itinerary.stops;
+  await plugin.moveStopLine(a, c, "A.md");
+  assert(source === "## 2027-01-01\n- [B](geo:35.1,139.1)\n- [C](geo:35.2,139.2)\n- [A](geo:35,139)", `${mode}: a current drag still moves the stop`);
+  await plugin.moveStopLine(plugin.current.itinerary.stops[0], plugin.current.itinerary.stops[1], "B.md");
+  assert(source.startsWith("## 2027-01-01\n- [B]"), `${mode}: a drag from another note's map moves nothing`);
+
+  openNote("A.md", "## 2027-01-01\n- [Cafe](geo:35,139)");
+  const cafe = plugin.current.itinerary.stops[0];
+  source = "## 2027-01-01\n- [Park](geo:35,139)";
+  plugin.setStopTransport(cafe, "walk", "A.md");
+  await Promise.resolve();
+  assert(source === "## 2027-01-01\n- [Park](geo:35,139)", `${mode}: transport picked for a stop that was renamed is not written`);
+}
+md.getMode = () => "source";
+{
+  // The same walk on two days: a late route for day 2 must not land on day 1 once lines moved.
+  const twoDays = "## 2027-01-01\n- [Station](geo:35,139)\n- 🚶 [Hotel](geo:35.01,139.01)\n## 2027-01-02\n- [Station](geo:35,139)\n- 🚶 [Hotel](geo:35.01,139.01)";
+  openNote("A.md", twoDays);
+  const hotel2 = plugin.current.itinerary.stops[3];
+  source = twoDays.replace("## 2027-01-02\n", "## 2027-01-02\nBreakfast first\n");
+  const shifted = source;
+  plugin.setStopMeta(hotel2, { leg: { from: "35.0000,139.0000", to: "35.0100,139.0100", via: "walk", s: 600, m: 1400 } }, true);
+  assert(source === shifted, "a route whose stop moved is dropped when the same leg is on another day");
+
+  // A pending conversion converts its own occurrence, not a copy of the link elsewhere.
+  let resolveRequest;
+  obsidianStub.requestUrl = () => new Promise((resolve) => { resolveRequest = resolve; });
+  const url = "https://www.google.com/maps/place/Hotel/@35,139,17z";
+  openNote("A.md", `## 2027-01-01\n- Morning ${url}\n- Afternoon ${url}`);
+  const pending = plugin.convert(md.editor, 1, url, "- Morning ");
+  source = `## 2027-01-01\n- Afternoon ${url}`; // the morning line is deleted while it resolves
+  resolveRequest(details);
+  await pending;
+  assert(source === `## 2027-01-01\n- Afternoon ${url}`, "a pending conversion does not take another copy of its link");
+  openNote("A.md", `## 2027-01-01\n- ${url}`);
+  const extended = plugin.convert(md.editor, 1, url, "- ");
+  source = `## 2027-01-01\n- ${url}/data=more`; // the URL is still being typed
+  resolveRequest(details);
+  await extended;
+  assert(source === `## 2027-01-01\n- ${url}/data=more`, "a pending conversion does not replace the start of a longer URL");
+}
+app.vault = deferredVault;
+console.log("smoke: OK (stale drags, renamed stops, duplicate legs and link copies)");
 
 openNote("A.md", note);
 let resolveRequest;

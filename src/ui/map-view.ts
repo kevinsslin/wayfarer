@@ -12,6 +12,8 @@ import { t } from "../core/i18n";
 import type WayfarerPlugin from "../main";
 import { attachPhoto } from "../photos";
 import { mapClearance } from "../core/map-layout";
+import { isValidTileUrl } from "../core/tiles";
+import { DEFAULT_SETTINGS } from "../settings";
 import { nextStop, previousStop, readProgress, resolveStop, stopRef } from "../core/journey";
 
 
@@ -262,13 +264,16 @@ export class WayfarerView extends ItemView {
     set("--wf-popup-max-h", Math.max(80, this.mapEl.clientHeight - this.topInset() - this.bottomInset() - 50));
   }
 
+  /** Called on open and on every render, so a provider changed in settings shows without reopening the pane. */
   applyTiles(): void {
     if (!this.map) return;
-    const key = `${this.plugin.settings.tileUrl}|${this.plugin.settings.tileAttribution}`;
+    // A template Leaflet cannot fill would throw on every tile; the default stands in until it is fixed.
+    const url = isValidTileUrl(this.plugin.settings.tileUrl) ? this.plugin.settings.tileUrl : DEFAULT_SETTINGS.tileUrl;
+    const key = `${url}|${this.plugin.settings.tileAttribution}`;
     if (key === this.tilesKey) return;
     this.tilesKey = key;
     this.tiles?.remove();
-    this.tiles = L.tileLayer(this.plugin.settings.tileUrl, {
+    this.tiles = L.tileLayer(url, {
       attribution: this.plugin.settings.tileAttribution,
       maxZoom: 19,
     }).addTo(this.map);
@@ -277,6 +282,7 @@ export class WayfarerView extends ItemView {
   /** Replaces the rendered itinerary. `cursorDay` picks the day to emphasise. */
   render(file: TFile | null, itinerary: Itinerary | null, cursorDay: number, cursorLine = -1): void {
     if (!this.map) return;
+    this.applyTiles();
     const fileChanged = file?.path !== this.file?.path;
     const prevItinerary = this.itinerary;
     const prevFocused = this.focused;
@@ -749,7 +755,8 @@ export class WayfarerView extends ItemView {
           card.removeClass("is-drop");
           const [path, line] = (e.dataTransfer?.getData(DRAG_TYPE) ?? "").split("\n");
           const src = Number(line);
-          if (line !== undefined && path === (this.file?.path ?? "") && Number.isInteger(src) && src !== stop.line && this.itinerary?.stops.some((x) => x.line === src)) void this.plugin.moveStopLine(src, stop.line);
+          const moving = line !== undefined && Number.isInteger(src) && src !== stop.line ? this.itinerary?.stops.find((x) => x.line === src) : undefined;
+          if (moving && this.file && path === this.file.path) void this.plugin.moveStopLine(moving, stop, path);
         };
         card.onclick = () => {
           if (this.isNarrow()) { this.narrowOpen = false; this.applySplit(); }
@@ -790,8 +797,9 @@ export class WayfarerView extends ItemView {
 
   private pickTransport(anchor: HTMLElement, leg: Leg): void {
     const menu = new Menu();
+    const path = this.file?.path ?? "";
     for (const mode of MODES) {
-      menu.addItem((item) => item.setTitle(`${TRANSPORT_EMOJI[mode]} ${t(`m_${mode}`)}`).setChecked(mode === leg.mode).onClick(() => this.plugin.setStopTransport(leg.to, mode)));
+      menu.addItem((item) => item.setTitle(`${TRANSPORT_EMOJI[mode]} ${t(`m_${mode}`)}`).setChecked(mode === leg.mode).onClick(() => this.plugin.setStopTransport(leg.to, mode, path)));
     }
     const bounds = anchor.getBoundingClientRect();
     menu.showAtPosition({ x: bounds.left, y: bounds.bottom });

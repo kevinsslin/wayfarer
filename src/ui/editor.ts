@@ -3,22 +3,29 @@ import { RangeSetBuilder } from "@codemirror/state";
 import type { Editor } from "obsidian";
 import { isGoogleMapsUrl } from "../core/gmaps-url";
 import { CATEGORY_EMOJI, pickCategory } from "../core/category";
-import { formatStop, metaSpan, stopLinks, type PlaceMeta } from "../core/itinerary";
+import { formatStop, maskMeta, metaSpan, stopLinks, type PlaceMeta } from "../core/itinerary";
 import type { ResolvedPlace } from "../core/resolve";
 import { todayHours } from "./map-view";
 
-/** Finds a Google Maps URL in a line, returning its character span. Links in `skip` are passed over. */
-export function findMapsUrl(line: string, skip?: Set<string>): { url: string; from: number; to: number } | null {
+/** The URL tokens on a line a conversion may take: not inside `%%wf:{}%%` metadata, and not a link that is already a stop. */
+function urlSpans(line: string): { url: string; from: number; to: number }[] {
   const converted = stopLinks(line);
   const re = /https?:\/\/\S+/g;
+  const out: { url: string; from: number; to: number }[] = [];
+  const text = maskMeta(line);
   let m: RegExpExecArray | null;
-  while ((m = re.exec(line))) {
+  while ((m = re.exec(text))) {
     const url = m[0].replace(/[),.;!?]+$/, "");
     const index = m.index;
     if (converted.some((link) => link.url && index >= link.from && index < link.to)) continue;
-    if (isGoogleMapsUrl(url) && !skip?.has(url)) return { url, from: m.index, to: m.index + url.length };
+    out.push({ url, from: index, to: index + url.length });
   }
-  return null;
+  return out;
+}
+
+/** Finds a Google Maps URL in a line, returning its character span. Links in `skip` are passed over. */
+export function findMapsUrl(line: string, skip?: Set<string>): { url: string; from: number; to: number } | null {
+  return urlSpans(line).find((span) => isGoogleMapsUrl(span.url) && !skip?.has(span.url)) ?? null;
 }
 
 /** The line should be replaced in place; returns the new text for the span. */
@@ -30,17 +37,20 @@ export function stopText(place: ResolvedPlace, withEmoji = true): string {
 
 /**
  * Swaps the URL on `line` for the resolved stop if the URL is still there.
- * The user may have kept typing while the network call ran, so we search the
- * current line text again rather than trusting the original offsets.
+ * The user may have kept typing while the network call ran, so the line is
+ * searched again, and its neighbours in case a line was added or removed
+ * above. Only the same occurrence is taken: the whole URL, with the same text
+ * before it on its line (`prefix`). Another copy of the link, or a longer URL
+ * that starts the same way, is left alone.
  */
-export function replaceUrlInEditor(editor: Editor, line: number, url: string, replacement: string): boolean {
+export function replaceUrlInEditor(editor: Editor, line: number, url: string, prefix: string, replacement: string): boolean {
   const search = (ln: number): boolean => {
     if (ln < 0 || ln >= editor.lineCount()) return false;
     const text = editor.getLine(ln);
-    const idx = text.indexOf(url);
-    if (idx === -1) return false;
+    const idx = prefix.length;
+    if (!text.startsWith(prefix) || !urlSpans(text).some((span) => span.from === idx && span.url === url)) return false;
     // `[label](url)`: the whole link goes, and the user's label stays as the stop's name.
-    const link = /\[([^\]]*)\]\($/.exec(text.slice(0, idx));
+    const link = /\[([^\]]*)\]\($/.exec(prefix);
     if (link && text[idx + url.length] === ")") {
       const named = link[1] ? replacement.replace(/\[[^\]]*\]\(/, () => `[${link[1].replace(/[[\]]/g, "")}](`) : replacement;
       const linkEnd = idx + url.length + 1;

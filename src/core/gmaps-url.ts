@@ -24,7 +24,9 @@ export interface ParsedMapsUrl {
 }
 
 const SHORT_HOSTS = ["maps.app.goo.gl", "goo.gl", "g.co"];
-const MAPS_HOST = /(^|\.)google\.[a-z.]+$|^maps\.google\./i;
+// google.com and Google's country domains (google.co.jp, google.com.tw, google.de), with any subdomain.
+// Not `google.` followed by anything: `maps.google.example.com` belongs to someone else.
+const MAPS_HOST = /^(?:[a-z0-9-]+\.)*google\.(?:com|[a-z]{2}|co\.[a-z]{2}|com\.[a-z]{2})$/i;
 
 export function isGoogleMapsUrl(text: string): boolean {
   const url = tryUrl(text);

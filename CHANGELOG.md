@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+- The `%%wf:{…}%%` metadata comment closes where it ends in the editor. A saved Google Maps link or website could run into the closing `%%`, because Obsidian reads a bare URL up to the next space, which left the comment open and dimmed the text after it. Metadata is now written with a space before its closing brace, and a `%%` inside a saved value is escaped. Running a conversion again leaves an already converted stop alone instead of converting the URL saved in its metadata. Older notes switch over the next time Wayfarer rewrites that stop, and older Wayfarer versions still read the new form. ([#8](https://github.com/kevinsslin/wayfarer/issues/8))
+- Writes that wait on something (a drag, a menu, Google) land only on the stop they were made for. A timeline drag moves nothing if either stop's line changed before the drop, and an editor drag is one undo step. Transport and fetched details are not written to a stop renamed in the meantime, or to another note's map. A late route is dropped when its stop moved and the same leg is on another day. A pending link conversion takes only its own URL, not a copy of the link on a nearby line or the start of a longer URL still being typed.
+- A Google Maps link with an exact pin keeps that pin when a Google key is set. Place details found by id now pass the same distance check as a name search, and a link that carries its own pin still converts when Google fails.
+- Only Google's own domains count as Google Maps links. Before, a host such as `maps.google.example.com` was accepted and opened from the map.
+- Exporting the trip replaces only a KML file that Wayfarer wrote. A same-named KML from elsewhere is kept, and the export is written beside it as `<note> (Wayfarer).kml`.
+- A map tiles URL or attribution changed in settings shows on the open map without reopening it. A tiles URL with a placeholder Leaflet cannot fill uses the default tiles instead of stopping the map from loading.
+
 ## [0.1.13] - 2026-11-17
 
 - iOS and iPadOS: the map keeps showing its trip when the map tab is focused. Before, opening the map in its own tab, or tapping it to pan or pick a stop, swapped in whichever note sat in the first tab, usually leaving an empty map. With the map in front at startup, it shows the most recently opened note. Reordering stops and picking transport on the map only ever write to the note the map shows. ([#2](https://github.com/kevinsslin/wayfarer/issues/2))
