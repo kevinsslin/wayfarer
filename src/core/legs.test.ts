@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { setLocale } from "./i18n";
 import { parseItinerary } from "./itinerary";
-import { bareLeg, coordKey, decodePolyline, encodePolyline, finishLeg, formatDuration, haversineM, legMetaFor, legText, minutesOf, shortWayLng, simplifyLine } from "./legs";
+import { bareLeg, coordKey, decodePolyline, encodePolyline, finishLeg, formatDuration, haversineM, legMetaFor, legText, minutesOf, shortWayLng, simplifyLine, transitQueryTime } from "./legs";
 
 beforeAll(() => setLocale("zh-TW"));
 
@@ -114,5 +114,21 @@ describe("saved route identity", () => {
   it("does not trust legacy routes without a destination", () => {
     const legacy = { ...saved, meta: { leg: { ...meta!, to: undefined } } };
     expect(bareLeg(from, legacy, "morning").routed).toBe(false);
+  });
+});
+
+describe("transitQueryTime", () => {
+  const now = Date.UTC(2026, 10, 24, 12, 0);
+  it("asks for a future departure as written", () => {
+    const d = new Date(Date.UTC(2026, 11, 1, 0, 0));
+    expect(transitQueryTime(d, now)).toBe(d);
+  });
+  it("asks for a past departure at the same weekday and time in the coming week", () => {
+    const past = new Date(Date.UTC(2026, 10, 1, 23, 0)); // a Sunday, 23:00 UTC
+    const q = transitQueryTime(past, now);
+    expect(q.getTime()).toBeGreaterThan(now);
+    expect(q.getTime() - now).toBeLessThanOrEqual(7 * 24 * 3600 * 1000);
+    expect(q.getUTCDay()).toBe(past.getUTCDay());
+    expect(q.toISOString().slice(11)).toBe(past.toISOString().slice(11));
   });
 });

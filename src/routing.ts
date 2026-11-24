@@ -33,6 +33,7 @@ export class LegRouter {
   private pausedUntil = 0;
   private pausedKey = "";
   private written = new Set<string>();
+  private file = "";
 
   constructor(
     private settings: () => WayfarerSettings,
@@ -43,6 +44,13 @@ export class LegRouter {
 
   legsFor(day: Day, dayDate: Date | null, file = ""): Leg[] {
     const settings = this.settings();
+    // Another note is on the map now: legs still waiting for the old one would spend requests
+    // on a trip nobody is looking at, ahead of this one's. Requests already sent finish.
+    if (file !== this.file) {
+      this.file = file;
+      for (const item of this.queue) if (item.file !== file) this.inflight.delete(item.key);
+      this.queue = this.queue.filter((item) => item.file === file);
+    }
     const legs: Leg[] = [];
     for (let i = 1; i < day.stops.length; i++) {
       const from = day.stops[i - 1];

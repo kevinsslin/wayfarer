@@ -8,6 +8,12 @@
 - Only Google's own domains count as Google Maps links. Before, a host such as `maps.google.example.com` was accepted and opened from the map.
 - Exporting the trip replaces only a KML file that Wayfarer wrote. A same-named KML from elsewhere is kept, and the export is written beside it as `<note> (Wayfarer).kml`.
 - A map tiles URL or attribution changed in settings shows on the open map without reopening it. A tiles URL with a placeholder Leaflet cannot fill uses the default tiles instead of stopping the map from loading.
+- A stop is only what the reader sees as one. Inline code is read before comments, as Obsidian does, so a `` `%%` `` written as code no longer hides the stops after it. A link written as code or inside a comment is not pinned, converting every link skips links in code and comments, and pasting a link into code leaves it as text. Choosing transport never edits an emoji inside a comment.
+- Hidden `%% … %%` comments, comment-only lines and fenced code under a stop stay out of its notes in the timeline and the exported KML.
+- Writing metadata keeps fields this version does not read (from a newer version, or added by hand), and a `%%wf:` comment that is not valid JSON is left as written instead of being replaced.
+- A transit leg on a past date is planned at the same weekday and time in the coming week, instead of at the moment the note was opened.
+- Switching notes drops the old note's routes still waiting to be requested, so the new note's legs are not stuck behind them.
+- With the map in front and its note's tab closed, a change made by sync or another app shows on the map, read from the vault. Changing the trip from the map then says to open the note instead of silently doing nothing.
 
 ## [0.1.13] - 2026-11-17
 

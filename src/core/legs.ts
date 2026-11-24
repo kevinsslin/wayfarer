@@ -213,3 +213,17 @@ export function shortWayLng(fromLng: number, toLng: number): number {
   if (d < -180) return toLng + 360;
   return toLng;
 }
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * The departure to ask Google for: `departure` itself when it is still ahead,
+ * else the same weekday and time in the next week that is. Google plans transit
+ * from the request time when given a past departure, which for a past trip
+ * would mean the timetable at whatever hour the note was opened.
+ */
+export function transitQueryTime(departure: Date, now = Date.now()): Date {
+  const t = departure.getTime();
+  if (t > now) return departure;
+  return new Date(t + Math.ceil((now - t + 1) / WEEK_MS) * WEEK_MS);
+}
