@@ -499,7 +499,7 @@ export function patchLineMeta(line: string, patch: Partial<PlaceMeta>, at?: Pick
     if (v === undefined || v === null) delete (meta as Record<string, unknown>)[k];
     else (meta as Record<string, unknown>)[k] = v;
   }
-  const text = Object.keys(meta).length ? `%%wf:${JSON.stringify(compactMeta(meta))}%%` : "";
+  const text = Object.keys(meta).length ? serializeMeta(meta) : "";
   if (mm) {
     // Replace only the metadata span; when it goes away take one adjacent space with it.
     let { start, end } = mm;
@@ -526,8 +526,17 @@ export function formatStop(name: string, lat: number, lng: number, meta?: PlaceM
   if (url) meta = { ...meta, lat: Number(round(lat)), lng: Number(round(lng)), locationUrl: url };
   const target = url ?? `geo:${round(lat)},${round(lng)}`;
   const parts = [`${emoji ? emoji + " " : ""}[${name.replace(/[[\]]/g, "")}](${target})`];
-  if (meta && Object.keys(meta).length > 0) parts.push(`%%wf:${JSON.stringify(compactMeta(meta))}%%`);
+  if (meta && Object.keys(meta).length > 0) parts.push(serializeMeta(meta));
   return parts.join(" ");
+}
+
+/**
+ * Writes the `%%wf:{…}%%` comment. The space before the closing brace ends any
+ * URL in the payload: Obsidian's editor reads a bare URL up to the next
+ * whitespace, so `…"}%%` would be swallowed and the comment left open.
+ */
+function serializeMeta(meta: PlaceMeta): string {
+  return `%%wf:${JSON.stringify(compactMeta(meta)).slice(0, -1)} }%%`;
 }
 
 /**

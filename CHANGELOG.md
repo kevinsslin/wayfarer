@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- The `%%wf:{…}%%` metadata comment closes where it ends in the editor. A saved Google Maps link or website could run into the closing `%%`, because Obsidian reads a bare URL up to the next space, which left the comment open and dimmed the text after it. Metadata is now written with a space before its closing brace. Older notes switch over the next time Wayfarer rewrites that stop, and older Wayfarer versions still read the new form. ([#8](https://github.com/kevinsslin/wayfarer/issues/8))
+
 ## [0.1.13] - 2026-11-17
 
 - iOS and iPadOS: the map keeps showing its trip when the map tab is focused. Before, opening the map in its own tab, or tapping it to pan or pick a stop, swapped in whichever note sat in the first tab, usually leaving an empty map. With the map in front at startup, it shows the most recently opened note. Reordering stops and picking transport on the map only ever write to the note the map shows. ([#2](https://github.com/kevinsslin/wayfarer/issues/2))
