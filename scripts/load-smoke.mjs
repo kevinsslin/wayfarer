@@ -360,6 +360,12 @@ console.log("smoke: OK (original Maps href, keyless import, transport, repeat co
   app.workspace.getLeavesOfType = (type) => type === "markdown" ? [{ view: other }] : [];
   plugin.refresh();
   assert(plugin.current.file.path === "Trip.md", "closing the map's note does not swap in another note");
+  // With no editor holding it, a change from sync or another app is read from the vault.
+  const synced = "## 2027-01-01\n- [Hotel](geo:35,139)\n- [Shrine](geo:35.01,139.01)\n- [Onsen](geo:35.02,139.02)";
+  app.vault.cachedRead = async (file) => (file.path === "Trip.md" ? synced : texts.get(file.path));
+  plugin.refresh();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert(plugin.current.file.path === "Trip.md" && plugin.current.itinerary.stops.length === 3, "a closed note changed elsewhere is read again from the vault");
   const otherBefore = texts.get("Other.md");
   await plugin.moveStopLine(plugin.current.itinerary.stops[1], plugin.current.itinerary.stops[0], "Trip.md");
   plugin.setStopTransport(plugin.current.itinerary.stops[0], "car");
@@ -431,6 +437,14 @@ md.getMode = () => "source";
   resolveRequest(details);
   await extended;
   assert(source === `## 2027-01-01\n- ${url}/data=more`, "a pending conversion does not replace the start of a longer URL");
+
+  // Links in code or a comment are examples: converting every link in the note leaves them alone.
+  let asked = 0;
+  obsidianStub.requestUrl = async () => { asked++; return details; };
+  const examples = `## 2027-01-01\n\`\`\`\n- ${url}\n\`\`\`\n- %% ${url} %%\n- \`${url}\``;
+  openNote("A.md", examples);
+  await plugin.convertAll(md.editor);
+  assert(source === examples && asked === 0, "bulk conversion skips links in fenced code, comments and inline code");
 }
 app.vault = deferredVault;
 console.log("smoke: OK (stale drags, renamed stops, duplicate legs and link copies)");

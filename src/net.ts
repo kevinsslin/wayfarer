@@ -4,6 +4,7 @@
  */
 import { requestUrl } from "obsidian";
 import { mapsUrlFromHtml } from "./core/gmaps-url";
+import { transitQueryTime } from "./core/legs";
 import type { ResolveDeps, ResolvedPlace } from "./core/resolve";
 
 const UA = "ObsidianWayfarer/0.1 (+https://github.com/kevinsslin/wayfarer)";
@@ -115,7 +116,10 @@ export interface RouteResult {
 
 /**
  * Google Routes API (New). Transit needs a departure time in the future;
- * the caller passes the day's date and the stop's time when it has them.
+ * the caller passes the day's date and the stop's time when it has them. A
+ * trip already past is asked at the same weekday and time in the coming week
+ * (`transitQueryTime`), so its timetable matches the plan's time of day
+ * rather than whatever runs at the moment of the request.
  */
 export async function googleRoute(
   apiKey: string,
@@ -131,7 +135,7 @@ export async function googleRoute(
     travelMode: mode,
     languageCode,
   };
-  if (mode === "TRANSIT" && departure && departure.getTime() > Date.now()) body.departureTime = departure.toISOString();
+  if (mode === "TRANSIT" && departure) body.departureTime = transitQueryTime(departure).toISOString();
   const res = await requestUrl({
     url: "https://routes.googleapis.com/directions/v2:computeRoutes",
     method: "POST",

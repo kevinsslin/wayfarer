@@ -3,16 +3,21 @@ import { RangeSetBuilder } from "@codemirror/state";
 import type { Editor } from "obsidian";
 import { isGoogleMapsUrl } from "../core/gmaps-url";
 import { CATEGORY_EMOJI, pickCategory } from "../core/category";
-import { formatStop, maskMeta, metaSpan, stopLinks, type PlaceMeta } from "../core/itinerary";
+import { formatStop, maskMeta, metaSpan, stopLinks, visibleLines, type PlaceMeta } from "../core/itinerary";
 import type { ResolvedPlace } from "../core/resolve";
 import { todayHours } from "./map-view";
 
-/** The URL tokens on a line a conversion may take: not inside `%%wf:{}%%` metadata, and not a link that is already a stop. */
-function urlSpans(line: string): { url: string; from: number; to: number }[] {
-  const converted = stopLinks(line);
+/**
+ * The URL tokens on a line a conversion may take: only what the reader sees
+ * as text (`visible`, the line from `visibleLines`: not fenced or inline code,
+ * not a comment), not inside `%%wf:{}%%` metadata, not a link already a stop.
+ */
+function urlSpans(visible: string | null): { url: string; from: number; to: number }[] {
+  if (visible === null) return [];
+  const converted = stopLinks(visible);
   const re = /https?:\/\/\S+/g;
   const out: { url: string; from: number; to: number }[] = [];
-  const text = maskMeta(line);
+  const text = maskMeta(visible);
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
     const url = m[0].replace(/[),.;!?]+$/, "");
@@ -23,9 +28,14 @@ function urlSpans(line: string): { url: string; from: number; to: number }[] {
   return out;
 }
 
-/** Finds a Google Maps URL in a line, returning its character span. Links in `skip` are passed over. */
-export function findMapsUrl(line: string, skip?: Set<string>): { url: string; from: number; to: number } | null {
-  return urlSpans(line).find((span) => isGoogleMapsUrl(span.url) && !skip?.has(span.url)) ?? null;
+/** Line `line` of the note as the reader sees it, offsets kept; null inside frontmatter or fenced code. */
+export function visibleLine(note: string, line: number): string | null {
+  return visibleLines(note.split("\n")).bare[line] ?? null;
+}
+
+/** Finds a Google Maps URL in a line (`visible`, from `visibleLine`), returning its character span. Links in `skip` are passed over. */
+export function findMapsUrl(visible: string | null, skip?: Set<string>): { url: string; from: number; to: number } | null {
+  return urlSpans(visible).find((span) => isGoogleMapsUrl(span.url) && !skip?.has(span.url)) ?? null;
 }
 
 /** The line should be replaced in place; returns the new text for the span. */
@@ -44,11 +54,12 @@ export function stopText(place: ResolvedPlace, withEmoji = true): string {
  * that starts the same way, is left alone.
  */
 export function replaceUrlInEditor(editor: Editor, line: number, url: string, prefix: string, replacement: string): boolean {
+  const visible = visibleLines(editor.getValue().split("\n")).bare;
   const search = (ln: number): boolean => {
     if (ln < 0 || ln >= editor.lineCount()) return false;
     const text = editor.getLine(ln);
     const idx = prefix.length;
-    if (!text.startsWith(prefix) || !urlSpans(text).some((span) => span.from === idx && span.url === url)) return false;
+    if (!text.startsWith(prefix) || !urlSpans(visible[ln] ?? null).some((span) => span.from === idx && span.url === url)) return false;
     // `[label](url)`: the whole link goes, and the user's label stays as the stop's name.
     const link = /\[([^\]]*)\]\($/.exec(prefix);
     if (link && text[idx + url.length] === ")") {

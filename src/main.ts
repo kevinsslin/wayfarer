@@ -5,7 +5,7 @@ import type { Transport } from "./core/category";
 import { ResolveError, distanceM, resolveMapsUrl, type ResolveDeps } from "./core/resolve";
 import { GoogleApiError, expandShortUrl, googlePlaces } from "./net";
 import { DEFAULT_SETTINGS, WayfarerSettingTab, type WayfarerSettings } from "./settings";
-import { findMapsUrl, metaDecorations, replaceUrlInEditor, stopText } from "./ui/editor";
+import { findMapsUrl, metaDecorations, replaceUrlInEditor, stopText, visibleLine } from "./ui/editor";
 import { WayfarerView, VIEW_TYPE_WAYFARER } from "./ui/map-view";
 import { readingPostProcessor } from "./ui/reading";
 import { NewTripModal } from "./ui/new-trip-modal";
@@ -74,7 +74,7 @@ export default class WayfarerPlugin extends Plugin {
       name: "Convert the map link on this line to a stop",
       editorCheckCallback: (checking, editor) => {
         const line = editor.getCursor().line;
-        const found = findMapsUrl(editor.getLine(line));
+        const found = findMapsUrl(visibleLine(editor.getValue(), line));
         if (!found) return false;
         if (!checking) void this.convert(editor, line, found.url, editor.getLine(line).slice(0, found.from));
         return true;
@@ -202,7 +202,20 @@ export default class WayfarerPlugin extends Plugin {
     const md = this.activeMarkdown();
     if (!md?.file) {
       // Keep showing the last note while the user is in the map pane or settings.
-      if (this.current) this.pushToViews();
+      if (this.current) {
+        this.pushToViews();
+        // No editor holds it (its tab was closed, as on a phone with the map in front), so a sync or
+        // another app may have changed it: read it from the vault instead of showing the old parse.
+        const file = this.current.file;
+        void Promise.resolve()
+          .then(() => this.app.vault.cachedRead(file))
+          .then((text) => {
+            if (this.unloaded || this.current?.file !== file || this.activeMarkdown()) return;
+            this.current = { file, itinerary: parseItinerary(text, { maxHeadingLevel: this.settings.dayHeadingLevel }) };
+            this.pushToViews();
+          })
+          .catch(() => {});
+      }
       return;
     }
     const itinerary = parseItinerary(md.editor.getValue(), { maxHeadingLevel: this.settings.dayHeadingLevel });
@@ -276,10 +289,12 @@ export default class WayfarerPlugin extends Plugin {
     return views.sort((a, b) => rank(a) - rank(b))[0] ?? null;
   }
 
-  /** The editor holding the note the map shows, for writes chosen on the map; null when that note is not open. */
+  /** The editor holding the note the map shows, for writes chosen on the map; null (and the user told why) when that note is not open. */
   private shownMarkdown(): MarkdownView | null {
     const md = this.activeMarkdown();
-    return md?.file && md.file.path === this.current?.file.path ? md : null;
+    if (md?.file && md.file.path === this.current?.file.path) return md;
+    if (this.current && !md) new Notice(`Wayfarer: open ${this.current.file.basename} to change it from the map.`);
+    return null;
   }
 
   /* ---------- export ---------- */
@@ -475,6 +490,8 @@ export default class WayfarerPlugin extends Plugin {
     const cursor = editor.getCursor("from");
     const prefix = editor.getLine(cursor.line).slice(0, cursor.ch);
     editor.replaceSelection(raw);
+    // Pasted into code or a comment, a link is an example and stays as text.
+    if (visibleLine(editor.getValue(), cursor.line)?.slice(cursor.ch, cursor.ch + text.length) !== text) return;
     void this.convert(editor, cursor.line, text, prefix);
   }
 
@@ -521,7 +538,7 @@ export default class WayfarerPlugin extends Plugin {
       // A line may hold several links; each conversion changes the line, so look again after each.
       for (let guard = 0; guard < 20; guard++) {
         if (!valid()) return;
-        const found = findMapsUrl(editor.getLine(line), failed);
+        const found = findMapsUrl(visibleLine(editor.getValue(), line), failed);
         if (!found) break;
         if (await this.convert(editor, line, found.url, editor.getLine(line).slice(0, found.from))) n++;
         else failed.add(found.url);

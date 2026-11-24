@@ -137,35 +137,23 @@ const IMAGE = /!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]|!\[[^\]]*\]\((\S+?)\)/;
 export function parseItinerary(markdown: string, opts: ParseOptions = {}): Itinerary {
   const maxLevel = opts.maxHeadingLevel ?? 2;
   const lines = markdown.split("\n");
-  const hasExact = headingLevels(lines).has(maxLevel);
+  const visible = visibleLines(lines);
+  const hasExact = headingLevels(visible.text).has(maxLevel);
   const isDayHeading = (level: number) => (hasExact ? level === maxLevel : level <= maxLevel);
   const days: Day[] = [];
   let current: Day = { title: "", headingLine: -1, endLine: lines.length, stops: [], index: -1, label: "", date: null, dateEnd: null };
-  let fence = "";
-  let inComment = false;
-  let inFrontmatter = lines[0] === "---";
   // Indent of the last stop line; deeper lines right under it are its notes, whatever they contain.
   let noteBase: number | null = null;
 
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i];
-    if (inFrontmatter) {
-      if (i > 0 && raw.trim() === "---") inFrontmatter = false;
-      continue;
-    }
-    const f = FENCE.exec(raw)?.[1];
-    if (f && (fence ? closesFence(f, fence) : true)) {
-      fence = fence ? "" : f;
-      continue;
-    }
-    if (fence) continue;
-    // Obsidian comments are not part of the plan; the plugin's own `%%wf:{}%%` comments are kept.
-    const stripped = stripComments(raw, inComment);
-    inComment = stripped.inComment;
-    const line = stripped.text;
+    // Frontmatter, fenced code, comments and inline code are not part of the plan; `%%wf:{}%%` is kept.
+    const prose = visible.text[i];
+    const line = visible.bare[i];
+    if (prose === null || line === null) continue;
     if (!raw.trim()) noteBase = null;
 
-    const h = HEADING.exec(line);
+    const h = HEADING.exec(prose);
     if (h && isDayHeading(h[1].length)) {
       current.endLine = i;
       days.push(current);
@@ -183,7 +171,7 @@ export function parseItinerary(markdown: string, opts: ParseOptions = {}): Itine
     for (const link of stopLinks(line)) {
       const { lat, lng, meta } = link;
       noteBase = indent;
-      if (image === undefined) image = IMAGE.exec(line) ?? imageBelow(lines, i);
+      if (image === undefined) image = IMAGE.exec(line) ?? imageBelow(lines, i, visible.bare);
       const before = maskMeta(line.slice(prevEnd, link.from));
       prevEnd = link.to;
       const name = linkName(link);
@@ -202,8 +190,8 @@ export function parseItinerary(markdown: string, opts: ParseOptions = {}): Itine
         time,
         // The emoji in the text is what everyone reads, so it wins; `via` is only read from older notes.
         transport: transportEmoji(before) ?? meta?.via ?? undefined,
-        note: plainNote(line),
-        notes: continuationLines(lines, i),
+        note: plainNote(prose),
+        notes: continuationLines(lines, i, visible.text),
         image: image ? (image[1] ?? image[2]) : undefined,
         index: current.stops.length,
         dayIndex: -1,
@@ -275,33 +263,96 @@ export function maskMeta(s: string): string {
 /**
  * Blanks Obsidian `%%…%%` comments (keeping offsets) while leaving `%%wf:{}%%`
  * intact. A comment left open at the end of the line continues on the next.
+ * Inline code is read first, as Obsidian does: a `%%` inside backticks is
+ * text, not a comment. `text` keeps inline code (it is prose a reader sees);
+ * `bare` blanks it too, since a link written as code is an example, not a stop.
  */
-export function stripComments(line: string, inComment: boolean): { text: string; inComment: boolean } {
-  let out = "";
+export function stripComments(line: string, inComment: boolean): { text: string; bare: string; inComment: boolean } {
+  let text = "";
+  let bare = "";
+  const keep = (s: string) => { text += s; bare += s; };
+  const blank = (n: number) => { text += " ".repeat(n); bare += " ".repeat(n); };
   let i = 0;
   while (i < line.length) {
     if (inComment) {
       const close = line.indexOf("%%", i);
-      if (close === -1) { out += " ".repeat(line.length - i); i = line.length; break; }
-      out += " ".repeat(close + 2 - i);
+      if (close === -1) { blank(line.length - i); break; }
+      blank(close + 2 - i);
       i = close + 2;
       inComment = false;
       continue;
     }
     const open = line.indexOf("%%", i);
-    if (open === -1) { out += line.slice(i); break; }
-    if (line.startsWith("%%wf:", open)) {
-      const close = line.indexOf("%%", open + 5);
-      const end = close === -1 ? line.length : close + 2;
-      out += line.slice(i, end);
+    const tick = line.indexOf("`", i);
+    if (tick !== -1 && (open === -1 || tick < open)) {
+      keep(line.slice(i, tick));
+      const run = (/^`+/.exec(line.slice(tick)) as RegExpExecArray)[0];
+      const close = closingRun(line, tick + run.length, run.length);
+      if (close === -1) { keep(run); i = tick + run.length; continue; }
+      const end = close + run.length;
+      text += line.slice(tick, end);
+      bare += " ".repeat(end - tick);
       i = end;
       continue;
     }
-    out += line.slice(i, open) + "  ";
+    if (open === -1) { keep(line.slice(i)); break; }
+    if (line.startsWith("%%wf:", open)) {
+      const close = line.indexOf("%%", open + 5);
+      const end = close === -1 ? line.length : close + 2;
+      keep(line.slice(i, end));
+      i = end;
+      continue;
+    }
+    keep(line.slice(i, open));
+    blank(2);
     i = open + 2;
     inComment = true;
   }
-  return { text: out, inComment };
+  return { text, bare, inComment };
+}
+
+/** Start of the next backtick run of exactly `n` from `from`, which closes a code span; -1 when there is none. */
+function closingRun(line: string, from: number, n: number): number {
+  const re = /`+/g;
+  re.lastIndex = from;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line))) if (m[0].length === n) return m.index;
+  return -1;
+}
+
+/**
+ * Every line of a note as Obsidian shows it, with offsets kept: `text` blanks
+ * comments, `bare` also blanks inline code. Frontmatter and fenced code are
+ * null in both. Parsing, link conversion and transport edits all read this, so
+ * a stop is only ever what the reader sees as one.
+ */
+export function visibleLines(lines: string[]): { text: (string | null)[]; bare: (string | null)[] } {
+  const text: (string | null)[] = [];
+  const bare: (string | null)[] = [];
+  let fence = "";
+  let inComment = false;
+  let inFrontmatter = lines[0] === "---";
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    if (inFrontmatter) {
+      if (i > 0 && raw.trim() === "---") inFrontmatter = false;
+      text.push(null); bare.push(null);
+      continue;
+    }
+    // A fence inside a comment is part of the comment.
+    const f = inComment ? undefined : FENCE.exec(raw)?.[1];
+    if (f && (fence ? closesFence(f, fence) : true)) {
+      fence = fence ? "" : f;
+      text.push(null); bare.push(null);
+      continue;
+    }
+    if (fence) { text.push(null); bare.push(null); continue; }
+    const s = stripComments(raw, inComment);
+    inComment = s.inComment;
+    text.push(s.text);
+    bare.push(s.bare);
+  }
+  return { text, bare };
 }
 
 function indentWidth(l: string): number {
@@ -314,20 +365,10 @@ function closesFence(candidate: string, open: string): boolean {
 }
 
 /** Heading levels present outside fenced blocks, comments and frontmatter. */
-function headingLevels(lines: string[]): Set<number> {
+function headingLevels(text: (string | null)[]): Set<number> {
   const out = new Set<number>();
-  let fence = "";
-  let inComment = false;
-  let inFrontmatter = lines[0] === "---";
-  for (let i = 0; i < lines.length; i++) {
-    const l = lines[i];
-    if (inFrontmatter) { if (i > 0 && l.trim() === "---") inFrontmatter = false; continue; }
-    const f = FENCE.exec(l)?.[1];
-    if (f && (fence ? closesFence(f, fence) : true)) { fence = fence ? "" : f; continue; }
-    if (fence) continue;
-    const stripped = stripComments(l, inComment);
-    inComment = stripped.inComment;
-    const h = HEADING.exec(stripped.text);
+  for (const l of text) {
+    const h = l === null ? null : HEADING.exec(l);
     if (h) out.add(h[1].length);
   }
   return out;
@@ -338,7 +379,7 @@ function headingLevels(lines: string[]): Set<number> {
  * markers and leading whitespace removed. Image-only lines are left out
  * (they become the stop's picture instead).
  */
-export function continuationLines(lines: string[], line: number): string[] {
+export function continuationLines(lines: string[], line: number, visible?: (string | null)[]): string[] {
   const indentOf = (l: string) => /^\s*/.exec(l)![0].replace(/\t/g, "    ").length;
   const base = indentOf(lines[line]);
   const out: string[] = [];
@@ -346,7 +387,10 @@ export function continuationLines(lines: string[], line: number): string[] {
     const l = lines[j];
     if (!l.trim()) break;
     if (indentOf(l) <= base || HEADING.test(l)) break;
-    const text = l.replace(/^\s*(?:[-*+]|\d+[.)])\s*/, "").trim();
+    // What a reader sees: a comment-only line or fenced code under the stop is not a note.
+    const v = visible ? visible[j] : l;
+    if (v === null || !v.trim()) continue;
+    const text = v.replace(/^\s*(?:[-*+]|\d+[.)])\s*/, "").replace(/\s{2,}/g, " ").trim();
     if (IMAGE.test(text) && text.replace(IMAGE, "").trim() === "") continue;
     out.push(text);
   }
@@ -354,13 +398,13 @@ export function continuationLines(lines: string[], line: number): string[] {
 }
 
 /** An image on one of the indented lines under `line`. */
-function imageBelow(lines: string[], line: number): RegExpExecArray | null {
+function imageBelow(lines: string[], line: number, visible: (string | null)[]): RegExpExecArray | null {
   const indentOf = (l: string) => /^\s*/.exec(l)![0].replace(/\t/g, "    ").length;
   const base = indentOf(lines[line]);
   for (let j = line + 1; j < lines.length; j++) {
     const l = lines[j];
     if (!l.trim() || indentOf(l) <= base || HEADING.test(l)) return null;
-    const m = IMAGE.exec(l);
+    const m = IMAGE.exec(visible[j] ?? "");
     if (m) return m;
   }
   return null;
@@ -452,7 +496,8 @@ const TRANSPORT_TOKEN = /\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictogra
  */
 export function setTransportOnLine(line: string, stop: Pick<Stop, "from" | "to" | "beforeFrom">, mode: Transport): string {
   const emoji = TRANSPORT_EMOJI[mode];
-  const before = maskMeta(line.slice(stop.beforeFrom, stop.from));
+  // An emoji inside a comment or inline code is the user's text, not the stop's transport.
+  const before = maskMeta(stripComments(line, false).bare.slice(stop.beforeFrom, stop.from));
   let out: string | null = null;
   for (const m of before.matchAll(TRANSPORT_TOKEN)) {
     if (!isTransportEmoji(m[0])) continue;
@@ -469,13 +514,13 @@ export function setTransportOnLine(line: string, stop: Pick<Stop, "from" | "to" 
 }
 
 /** The `%%wf:{}%%` comment that belongs to the link ending at `linkEnd`: the first one before the next link. */
-export function metaSpan(line: string, linkEnd: number): { start: number; end: number; meta: PlaceMeta } | null {
+export function metaSpan(line: string, linkEnd: number): { start: number; end: number; meta: PlaceMeta; json: string } | null {
   const rest = line.slice(linkEnd);
   const nextLink = stopCandidates(rest)[0];
   const scope = nextLink ? rest.slice(0, nextLink.index) : rest;
   const mm = META.exec(scope);
   if (!mm) return null;
-  return { start: linkEnd + mm.index, end: linkEnd + mm.index + mm[0].length, meta: parseMeta(mm[1]) ?? {} };
+  return { start: linkEnd + mm.index, end: linkEnd + mm.index + mm[0].length, meta: parseMeta(mm[1]) ?? {}, json: mm[1] };
 }
 
 /**
@@ -495,18 +540,23 @@ export function stopStillAt(line: string, stop: Pick<Stop, "from" | "to" | "lat"
  */
 export function patchLineMeta(line: string, patch: Partial<PlaceMeta>, at?: Pick<Stop, "to">): string {
   // With a stop given, only the comment that belongs to its link is touched; a line may hold several stops.
-  let mm: { start: number; end: number; meta: PlaceMeta } | null = null;
+  let mm: { start: number; end: number; meta: PlaceMeta; json: string } | null = null;
   if (at) mm = metaSpan(line, at.to);
   else {
     const m = META.exec(line);
-    if (m) mm = { start: m.index, end: m.index + m[0].length, meta: parseMeta(m[1]) ?? {} };
+    if (m) mm = { start: m.index, end: m.index + m[0].length, meta: parseMeta(m[1]) ?? {}, json: m[1] };
   }
+  // A comment that is not a JSON object was edited by hand; replacing it would lose what was written.
+  const raw = mm ? jsonObject(mm.json) : {};
+  if (!raw) return line;
   const meta: PlaceMeta = mm?.meta ?? {};
+  // Fields this version does not read (a newer version wrote them, or the user did) are carried over.
+  const extra = Object.fromEntries(Object.entries(raw).filter(([k]) => !(k in meta) && !(k in patch)));
   for (const [k, v] of Object.entries(patch)) {
     if (v === undefined || v === null) delete (meta as Record<string, unknown>)[k];
     else (meta as Record<string, unknown>)[k] = v;
   }
-  const text = Object.keys(meta).length ? serializeMeta(meta) : "";
+  const text = Object.keys(meta).length || Object.keys(extra).length ? serializeMeta(meta, extra) : "";
   if (mm) {
     // Replace only the metadata span; when it goes away take one adjacent space with it.
     let { start, end } = mm;
@@ -544,8 +594,8 @@ export function formatStop(name: string, lat: number, lng: number, meta?: PlaceM
  * inside a value (only strings can hold one) is written as `%\u0025`, which
  * reads back the same but cannot close the comment early.
  */
-function serializeMeta(meta: PlaceMeta): string {
-  const json = JSON.stringify(compactMeta(meta)).replace(/%%/g, "%\\u0025");
+function serializeMeta(meta: PlaceMeta, extra: Record<string, unknown> = {}): string {
+  const json = JSON.stringify({ ...compactMeta(meta), ...extra }).replace(/%%/g, "%\\u0025");
   return `%%wf:${json.slice(0, -1)} }%%`;
 }
 
@@ -554,6 +604,15 @@ function serializeMeta(meta: PlaceMeta): string {
  * foreign value of the wrong type is dropped rather than left to throw later
  * (`rating.toFixed` inside the editor extension would disable every chip).
  */
+function jsonObject(json: string): Record<string, unknown> | null {
+  try {
+    const v: unknown = JSON.parse(json);
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function parseMeta(json: string): PlaceMeta | undefined {
   let raw: unknown;
   try { raw = JSON.parse(json); } catch { return undefined; }

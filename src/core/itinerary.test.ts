@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayAtLine, dayDateEnd, dayLabel, formatStop, moveBlock, moveBlockAt, parseItinerary, parseMeta, patchLineMeta, setTransportOnLine, stopStillAt } from "./itinerary";
+import { dayAtLine, dayDateEnd, dayLabel, formatStop, moveBlock, moveBlockAt, parseItinerary, parseMeta, patchLineMeta, setTransportOnLine, stopStillAt, stripComments, visibleLines } from "./itinerary";
 
 const NOTE = `---
 locations:
@@ -391,4 +391,42 @@ it("invalidates saved coordinates when the original href is edited", () => {
   const changed = "https://www.google.com/maps/place/Shop/@35,139,17z";
   const text = formatStop("Cafe", 35, 139, undefined, undefined, original);
   expect(parseItinerary(text.replace(`[Cafe](${original})`, `[Cafe](${changed})`)).stops).toHaveLength(0);
+});
+
+describe("what the reader sees", () => {
+  it("reads inline code before comments, as Obsidian does", () => {
+    const trip = parseItinerary("## 2027-01-01\n- Example: `%%` is a comment marker\n- [Cafe](geo:35,139)");
+    expect(trip.stops.map((s) => s.name)).toEqual(["Cafe"]);
+  });
+  it("does not pin a link written as code or inside a comment", () => {
+    const trip = parseItinerary("## 2027-01-01\n- Write stops like `[Cafe](geo:35,139)`\n- %% [Old](geo:1,2) %% [Hotel](geo:36,140)");
+    expect(trip.stops.map((s) => s.name)).toEqual(["Hotel"]);
+  });
+  it("keeps hidden comments and fenced code out of a stop's notes", () => {
+    const trip = parseItinerary("## 2027-01-01\n- [Cafe](geo:35,139) %% door code 1234 %%\n    %% internal only %%\n    Order the `tonkotsu` %% not this %%\n    ```\n    raw\n    ```\n    Pay cash");
+    const [cafe] = trip.stops;
+    expect(cafe.note).toBe("Cafe");
+    expect(cafe.notes).toEqual(["Order the `tonkotsu`", "Pay cash"]);
+  });
+  it("writes transport before the link, not into a comment", () => {
+    const line = "- %% 🚌 %% [Hotel](geo:1,2)";
+    const [stop] = parseItinerary(`## 2027-01-01\n${line}`).stops;
+    expect(stop.transport).toBeUndefined();
+    expect(setTransportOnLine(line, stop, "walk")).toBe("- %% 🚌 %% 🚶 [Hotel](geo:1,2)");
+  });
+  it("marks inline code apart from comments", () => {
+    expect(stripComments("a `x %% y` b %% c", false)).toEqual({ text: "a `x %% y` b     ", bare: "a          b     ", inComment: true });
+    expect(visibleLines(["---", "k: v", "---", "```", "[A](geo:1,2)", "```", "ok"]).bare).toEqual([null, null, null, null, null, null, "ok"]);
+  });
+});
+
+describe("metadata written over what is already there", () => {
+  it("keeps fields this version does not read", () => {
+    const line = '- [A](geo:1,2) %%wf:{"rating":4,"reservation":"R-12","via":"bus"}%%';
+    expect(patchLineMeta(line, { via: undefined })).toBe('- [A](geo:1,2) %%wf:{"rating":4,"reservation":"R-12" }%%');
+  });
+  it("leaves a comment that is not valid JSON alone", () => {
+    const line = '- [A](geo:1,2) %%wf:{"rating":4,}%%';
+    expect(patchLineMeta(line, { placeId: "X" })).toBe(line);
+  });
 });
