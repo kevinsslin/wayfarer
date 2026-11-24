@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatStop, parseItinerary } from "./itinerary";
-import { tripKml } from "./kml";
+import { isWayfarerKml, tripKml } from "./kml";
 
 describe("tripKml", () => {
   const it2 = parseItinerary(`# Japan 2026
@@ -36,4 +36,12 @@ it("exports the original store link alongside the stop's coordinates", () => {
   const result = tripKml(parseItinerary(note), "Trip");
   expect(result).toContain(url.replace(/&/g, "&amp;"));
   expect(result).toContain("<coordinates>139,35,0</coordinates>");
+});
+
+it("knows the files its exports wrote, including ones from before the marker", () => {
+  const trip = parseItinerary("## 2027-01-01\n- [Cafe](geo:35,139)");
+  const kml = tripKml(trip, "Trip");
+  expect(isWayfarerKml(kml)).toBe(true);
+  expect(isWayfarerKml(kml.replace(/<!--.*-->\n/, ""))).toBe(true);
+  expect(isWayfarerKml('<?xml version="1.0"?><kml><Document><name>My own map</name></Document></kml>')).toBe(false);
 });

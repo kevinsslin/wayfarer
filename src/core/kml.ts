@@ -9,6 +9,16 @@ import { stopNotes, type Itinerary, type Stop } from "./itinerary";
  * and time, the notes and a Google Maps link in the description, pins in
  * the day's colour. Deterministic: the same note gives the same file.
  */
+const MARKER = "<!-- Exported by Wayfarer. Each export replaces this file. -->";
+
+/**
+ * True for a file an earlier export wrote, which the next export may replace.
+ * Exports before the marker are known by their per-day pin styles.
+ */
+export function isWayfarerKml(text: string): boolean {
+  return text.includes(MARKER) || /<Style id="day\d+"><IconStyle><color>[0-9a-f]{8}<\/color><scale>1\.1<\/scale><Icon><href>https:\/\/maps\.google\.com\/mapfiles\/kml\/paddle\/wht-blank\.png/.test(text);
+}
+
 export function tripKml(it: Itinerary, title: string, dayNameTemplate = "Day {n}"): string {
   const days = it.days.filter((d) => d.stops.length > 0);
   const styles = days.map((d) => `    <Style id="day${d.index}"><IconStyle><color>${kmlColor(dayColor(d.index))}</color><scale>1.1</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/wht-blank.png</href></Icon></IconStyle></Style>`);
@@ -19,6 +29,7 @@ export function tripKml(it: Itinerary, title: string, dayNameTemplate = "Day {n}
   });
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
+    MARKER,
     `<kml xmlns="http://www.opengis.net/kml/2.2">`,
     `  <Document>`,
     `    <name>${esc(title)}</name>`,

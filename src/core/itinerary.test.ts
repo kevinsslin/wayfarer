@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayAtLine, dayDateEnd, dayLabel, formatStop, moveBlock, parseItinerary, parseMeta, patchLineMeta, setTransportOnLine, stopStillAt } from "./itinerary";
+import { dayAtLine, dayDateEnd, dayLabel, formatStop, moveBlock, moveBlockAt, parseItinerary, parseMeta, patchLineMeta, setTransportOnLine, stopStillAt } from "./itinerary";
 
 const NOTE = `---
 locations:
@@ -220,6 +220,10 @@ describe("moveBlock", () => {
   it("leaves the lines alone for a no-op or bad index", () => {
     expect(moveBlock(lines, 3, 3)).toBe(lines);
     expect(moveBlock(lines, 3, 99)).toBe(lines);
+    // Where the block landed, for the cursor.
+    expect(moveBlockAt(lines, 1, 4)?.at).toBe(5);
+    expect(moveBlockAt(lines, 4, 1)?.at).toBe(1);
+    expect(moveBlockAt(lines, 3, 3)).toBeNull();
   });
 });
 
@@ -247,6 +251,8 @@ describe("two stops on one line", () => {
     expect(stopStillAt(line, b)).toBe(true);
     expect(stopStillAt("- x " + line, b)).toBe(false);
     expect(stopStillAt(line.replace("geo:3,4", "geo:3,5"), b)).toBe(false);
+    // Same offsets and pin, different place: renamed while a write was pending.
+    expect(stopStillAt(line.replace("[B]", "[X]"), b)).toBe(false);
   });
 });
 
@@ -342,6 +348,12 @@ describe("retained Google Maps links", () => {
     const site = patchLineMeta("- [A](geo:1,2)", { website: "https://example.com/" });
     expect(site).not.toMatch(urlIntoClose);
     expect(parseItinerary(site).stops[0].meta?.website).toBe("https://example.com/");
+  });
+  it("keeps a %% inside a saved value from closing the comment", () => {
+    const line = patchLineMeta("- [A](geo:1,2) 備註", { address: "Gate }%% East" });
+    expect(line.slice(line.indexOf("%%wf:") + 5, line.lastIndexOf("%%"))).not.toContain("%%");
+    expect(line.endsWith(" 備註")).toBe(true);
+    expect(parseItinerary(line).stops[0].meta?.address).toBe("Gate }%% East");
   });
   it("requires valid saved coordinates and ignores unconverted or unrelated links", () => {
     expect(parseItinerary(`[Cafe](${url})`).stops).toHaveLength(0);
