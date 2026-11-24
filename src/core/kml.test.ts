@@ -45,3 +45,10 @@ it("knows the files its exports wrote, including ones from before the marker", (
   expect(isWayfarerKml(kml.replace(/<!--.*-->\n/, ""))).toBe(true);
   expect(isWayfarerKml('<?xml version="1.0"?><kml><Document><name>My own map</name></Document></kml>')).toBe(false);
 });
+
+it("leaves hidden comments out of the exported notes", () => {
+  const trip = parseItinerary("## 2027-01-01\n- [Cafe](geo:35,139)\n    %% internal itinerary note %%\n    Window seat");
+  const kml = tripKml(trip, "Trip");
+  expect(kml).toContain("Window seat");
+  expect(kml).not.toContain("internal itinerary note");
+});

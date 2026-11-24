@@ -52,6 +52,25 @@ describe("LegRouter", () => {
     releases.forEach((release) => release());
   });
 
+  it("drops queued legs of a note the map no longer shows", async () => {
+    const releases: Array<() => void> = [];
+    vi.mocked(googleRoute).mockImplementation(() => new Promise((resolve) => releases.push(() => resolve(route))));
+    const router = new LegRouter(settings, vi.fn());
+    const left = many();
+    router.legsFor(left, dateForDay(left), "left.md");
+    expect(googleRoute).toHaveBeenCalledTimes(3);
+    const shown = day();
+    router.legsFor(shown, dateForDay(shown), "shown.md");
+    releases.shift()!();
+    await vi.waitFor(() => expect(googleRoute).toHaveBeenCalledTimes(4));
+    // The next request is the shown note's leg, not the left note's fourth.
+    expect(vi.mocked(googleRoute).mock.calls[3][3]).toMatchObject({ lat: 35.1, lng: 139.1 });
+    releases.splice(0).forEach((release) => release());
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(googleRoute).toHaveBeenCalledTimes(4);
+    router.dispose();
+  });
+
   it("drops queued requests after a refusal and permits a corrected key", async () => {
     vi.mocked(googleRoute).mockRejectedValue(new GoogleApiError(403, "refused"));
     let key = "bad-key";
