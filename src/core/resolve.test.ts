@@ -43,6 +43,24 @@ describe("resolveMapsUrl", () => {
     const r = await resolveMapsUrl("https://www.google.com/maps/place/X/@34.409,133.205,17z", { places });
     expect(r).toMatchObject({ name: "X", source: "url" });
   });
+  it("keeps an exact pin when Places details by id land elsewhere", async () => {
+    const url = "https://www.google.com/maps/place/Cafe/data=!3m1!4b1!4m5!3m4!8m2!3d35!4d139?q=place_id:ChIJcafe";
+    const far = { name: "Cafe HQ", lat: 35.02, lng: 139.03, source: "places" as const, meta: { placeId: "ChIJcafe", rating: 4 } };
+    const close = { ...far, lat: 35.0005, lng: 139.0005 };
+    const searchText = async () => null;
+    const r1 = await resolveMapsUrl("https://www.google.com/maps/search/?api=1&query=35,139&query_place_id=ChIJcafe", { places: { details: async () => far, searchText } });
+    expect(r1).toMatchObject({ lat: 35, lng: 139 });
+    const details = vi.fn(async () => close);
+    const r2 = await resolveMapsUrl(url, { places: { details, searchText } });
+    expect(details).toHaveBeenCalled();
+    expect(r2).toMatchObject({ name: "Cafe HQ", lat: 35, lng: 139 });
+  });
+  it("still converts a link with its own pin when Places fails", async () => {
+    const places = { details: async () => { throw new Error("offline"); }, searchText: async () => { throw new Error("offline"); } };
+    const r = await resolveMapsUrl("https://www.google.com/maps/place/X/@34.409,133.205,17z", { places });
+    expect(r).toMatchObject({ name: "X", lat: 34.409, lng: 133.205, source: "url" });
+    await expect(resolveMapsUrl("https://www.google.com/maps/place/?q=place_id:ChIJabc", { places })).rejects.toThrow(/offline/);
+  });
   it("refuses a text-only link without a key instead of geocoding it elsewhere", async () => {
     await expect(resolveMapsUrl("https://maps.google.com/?q=Ichiran+Ramen+Shibuya", {})).rejects.toThrow(/Share the place/);
   });

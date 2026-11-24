@@ -186,7 +186,7 @@ export function parseItinerary(markdown: string, opts: ParseOptions = {}): Itine
       if (image === undefined) image = IMAGE.exec(line) ?? imageBelow(lines, i);
       const before = maskMeta(line.slice(prevEnd, link.from));
       prevEnd = link.to;
-      const name = link.name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      const name = linkName(link);
       current.stops.push({
         name,
         url: link.url,
@@ -235,6 +235,11 @@ export interface StopLink {
   metaTo?: number;
 }
 
+/** The stop name a link gives: its label, or its coordinates when the label is empty. */
+function linkName(link: Pick<StopLink, "name" | "lat" | "lng">): string {
+  return link.name || `${link.lat.toFixed(4)}, ${link.lng.toFixed(4)}`;
+}
+
 /** Shared source spans for parsing, note edits and both rendered note surfaces. */
 export function stopLinks(line: string): StopLink[] {
   const links = stopCandidates(line);
@@ -262,8 +267,8 @@ function stopCandidates(text: string): RegExpExecArray[] {
   return [...maskMeta(text).matchAll(STOP_LINK)].filter((m) => m[2].startsWith("geo:") || isGoogleMapsUrl(m[2]));
 }
 
-/** Blanks every `%%wf:{}%%` comment in `s`, keeping offsets, so emoji inside saved data are not read as the user's. */
-function maskMeta(s: string): string {
+/** Blanks every `%%wf:{}%%` comment in `s`, keeping offsets, so emoji and URLs inside saved data are not read as the user's. */
+export function maskMeta(s: string): string {
   return s.replace(/%%wf:\{.*?\}%%/g, (m) => " ".repeat(m.length));
 }
 
@@ -477,8 +482,10 @@ export function metaSpan(line: string, linkEnd: number): { start: number; end: n
  * True when the stop's link is still at the offsets the pane parsed it
  * from, so a write computed earlier lands on the stop it was meant for.
  */
-export function stopStillAt(line: string, stop: Pick<Stop, "from" | "to" | "lat" | "lng"> & Partial<Pick<Stop, "url">>): boolean {
-  return stopLinks(line).some((link) => link.from === stop.from && link.to === stop.to && link.lat === stop.lat && link.lng === stop.lng && link.url === stop.url);
+export function stopStillAt(line: string, stop: Pick<Stop, "from" | "to" | "lat" | "lng"> & Partial<Pick<Stop, "url" | "name">>): boolean {
+  // The name too: `[Park](geo:35,139)` typed over a same-length `[Cafe](geo:35,139)` keeps every offset.
+  return stopLinks(line).some((link) => link.from === stop.from && link.to === stop.to && link.lat === stop.lat && link.lng === stop.lng && link.url === stop.url
+    && (stop.name === undefined || linkName(link) === stop.name));
 }
 
 /**
@@ -499,7 +506,7 @@ export function patchLineMeta(line: string, patch: Partial<PlaceMeta>, at?: Pick
     if (v === undefined || v === null) delete (meta as Record<string, unknown>)[k];
     else (meta as Record<string, unknown>)[k] = v;
   }
-  const text = Object.keys(meta).length ? `%%wf:${JSON.stringify(compactMeta(meta))}%%` : "";
+  const text = Object.keys(meta).length ? serializeMeta(meta) : "";
   if (mm) {
     // Replace only the metadata span; when it goes away take one adjacent space with it.
     let { start, end } = mm;
@@ -526,8 +533,20 @@ export function formatStop(name: string, lat: number, lng: number, meta?: PlaceM
   if (url) meta = { ...meta, lat: Number(round(lat)), lng: Number(round(lng)), locationUrl: url };
   const target = url ?? `geo:${round(lat)},${round(lng)}`;
   const parts = [`${emoji ? emoji + " " : ""}[${name.replace(/[[\]]/g, "")}](${target})`];
-  if (meta && Object.keys(meta).length > 0) parts.push(`%%wf:${JSON.stringify(compactMeta(meta))}%%`);
+  if (meta && Object.keys(meta).length > 0) parts.push(serializeMeta(meta));
   return parts.join(" ");
+}
+
+/**
+ * Writes the `%%wf:{…}%%` comment. The space before the closing brace ends any
+ * URL in the payload: Obsidian's editor reads a bare URL up to the next
+ * whitespace, so `…"}%%` would be swallowed and the comment left open. A `%%`
+ * inside a value (only strings can hold one) is written as `%\u0025`, which
+ * reads back the same but cannot close the comment early.
+ */
+function serializeMeta(meta: PlaceMeta): string {
+  const json = JSON.stringify(compactMeta(meta)).replace(/%%/g, "%\\u0025");
+  return `%%wf:${json.slice(0, -1)} }%%`;
 }
 
 /**
@@ -604,6 +623,11 @@ export function stopNotes(stop: Stop): string[] {
  * its block when moving down. Same rule as the drag in the timeline.
  */
 export function moveBlock(lines: string[], from: number, to: number): string[] {
+  return moveBlockAt(lines, from, to)?.lines ?? lines;
+}
+
+/** `moveBlock`, also giving the line the moved block now starts on; null when nothing moves. */
+export function moveBlockAt(lines: string[], from: number, to: number): { lines: string[]; at: number } | null {
   const indentOf = (l: string) => (/^\s*/.exec(l) as RegExpExecArray)[0].replace(/\t/g, "    ").length;
   const blockLen = (ls: string[], ln: number): number => {
     const base = indentOf(ls[ln]);
@@ -611,13 +635,13 @@ export function moveBlock(lines: string[], from: number, to: number): string[] {
     while (ln + n < ls.length && ls[ln + n].trim() && indentOf(ls[ln + n]) > base) n++;
     return n;
   };
-  if (from < 0 || from >= lines.length || to < 0 || to >= lines.length || from === to) return lines;
+  if (from < 0 || from >= lines.length || to < 0 || to >= lines.length || from === to) return null;
   const count = blockLen(lines, from);
   // A target inside the block itself (one of the stop's own notes) is nowhere to go.
-  if (to > from && to < from + count) return lines;
+  if (to > from && to < from + count) return null;
   const block = lines.slice(from, from + count);
   const rest = [...lines.slice(0, from), ...lines.slice(from + count)];
   // Moving down: the target line has shifted up by the removed block; land after the target's own block.
   const at = from < to ? Math.min(rest.length, to - count + blockLen(rest, to - count)) : to;
-  return [...rest.slice(0, at), ...block, ...rest.slice(at)];
+  return { lines: [...rest.slice(0, at), ...block, ...rest.slice(at)], at };
 }

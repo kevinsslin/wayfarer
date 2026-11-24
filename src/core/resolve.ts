@@ -56,15 +56,25 @@ export async function resolveMapsUrl(input: string, deps: ResolveDeps): Promise<
   // elsewhere is a different place and is dropped; the pin itself is never
   // moved away from an exact `!3d…!4d…` coordinate.
   if (deps.places) {
-    if (parsed.placeId) {
-      const p = await deps.places.details(parsed.placeId);
-      if (p) return keepLink(p);
-    }
-    const text = parsed.name ?? parsed.query;
-    if (text) {
-      const p = await deps.places.searchText(text, urlPin ?? undefined);
-      if (p && !urlPin) return keepLink(p);
-      if (p && urlPin && distanceM(p, urlPin) <= (parsed.exact ? 300 : 3000)) return keepLink(parsed.exact ? { ...p, ...urlPin } : p);
+    // Within reach of the link's own pin, or anywhere when the link has none.
+    const near = (p: ResolvedPlace | null): ResolvedPlace | null => {
+      if (!p || !urlPin) return p;
+      if (distanceM(p, urlPin) > (parsed.exact ? 300 : 3000)) return null;
+      return parsed.exact ? { ...p, ...urlPin } : p;
+    };
+    try {
+      if (parsed.placeId) {
+        const p = near(await deps.places.details(parsed.placeId));
+        if (p) return keepLink(p);
+      }
+      const text = parsed.name ?? parsed.query;
+      if (text) {
+        const p = near(await deps.places.searchText(text, urlPin ?? undefined));
+        if (p) return keepLink(p);
+      }
+    } catch (e) {
+      // Details are extra: a link that carries its own pin still converts when Google fails.
+      if (!urlPin) throw e;
     }
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayAtLine, dayDateEnd, dayLabel, formatStop, moveBlock, parseItinerary, parseMeta, patchLineMeta, setTransportOnLine, stopStillAt } from "./itinerary";
+import { dayAtLine, dayDateEnd, dayLabel, formatStop, moveBlock, moveBlockAt, parseItinerary, parseMeta, patchLineMeta, setTransportOnLine, stopStillAt } from "./itinerary";
 
 const NOTE = `---
 locations:
@@ -112,7 +112,7 @@ describe("dayDateEnd", () => {
 describe("formatStop", () => {
   it("round-trips through the parser", () => {
     const text = formatStop("千光寺 [本堂]", 34.40891234567, 133.20445678, { rating: 4.55, hours: ["Mon: 9–17"], website: "https://x" });
-    expect(text).toBe('[千光寺 本堂](geo:34.408912,133.204457) %%wf:{"rating":4.6,"hours":["Mon: 9–17"],"website":"https://x"}%%');
+    expect(text).toBe('[千光寺 本堂](geo:34.408912,133.204457) %%wf:{"rating":4.6,"hours":["Mon: 9–17"],"website":"https://x" }%%');
     const parsed = parseItinerary(text);
     expect(parsed.stops[0]).toMatchObject({ name: "千光寺 本堂", lat: 34.408912, lng: 133.204457 });
     expect(parsed.stops[0].meta?.rating).toBe(4.6);
@@ -128,10 +128,10 @@ describe("meta placement and day headings", () => {
     const st = it2.stops[0];
     expect(st.transport).toBe("bus");
     const patched = patchLineMeta(`- [赤沼](geo:1,2) 備註`, { via: "walk" });
-    expect(patched).toBe(`- [赤沼](geo:1,2) %%wf:{"via":"walk"}%% 備註`);
+    expect(patched).toBe(`- [赤沼](geo:1,2) %%wf:{"via":"walk" }%% 備註`);
     expect(patchLineMeta(patched, { via: undefined })).toBe(`- [赤沼](geo:1,2) 備註`);
-    expect(patchLineMeta(`    - [赤沼](geo:1,2)  兩個空格 %%wf:{"via":"bus"}%%`, { via: "walk" })).toBe(`    - [赤沼](geo:1,2)  兩個空格 %%wf:{"via":"walk"}%%`);
-    expect(patchLineMeta(`- [赤沼](geo:1,2) %%wf:{"rating":4.4}%%`, { via: "train" })).toBe(`- [赤沼](geo:1,2) %%wf:{"rating":4.4,"via":"train"}%%`);
+    expect(patchLineMeta(`    - [赤沼](geo:1,2)  兩個空格 %%wf:{"via":"bus"}%%`, { via: "walk" })).toBe(`    - [赤沼](geo:1,2)  兩個空格 %%wf:{"via":"walk" }%%`);
+    expect(patchLineMeta(`- [赤沼](geo:1,2) %%wf:{"rating":4.4}%%`, { via: "train" })).toBe(`- [赤沼](geo:1,2) %%wf:{"rating":4.4,"via":"train" }%%`);
   });
   it("treats only the configured level as days when it exists", () => {
     const it2 = parseItinerary(`# Trip\n[A](geo:1,1)\n## 9/16\n[B](geo:2,2)\n## 9/17\n[C](geo:3,3)`);
@@ -174,12 +174,12 @@ describe("setTransportOnLine", () => {
   });
   it("drops a legacy via so the text is the only source", () => {
     const line = `- [A](geo:1,2) %%wf:{"via":"bus","rating":4.1}%%`;
-    expect(setTransportOnLine(line, stopOf(line), "walk")).toBe(`- 🚶 [A](geo:1,2) %%wf:{"rating":4.1}%%`);
+    expect(setTransportOnLine(line, stopOf(line), "walk")).toBe(`- 🚶 [A](geo:1,2) %%wf:{"rating":4.1 }%%`);
   });
   it("drops a route saved for another mode and keeps one for the same mode", () => {
     const line = `- 🚌 [A](geo:1,2) %%wf:{"leg":{"from":"1.0000,2.0000","via":"bus","s":600,"m":3000}}%%`;
     expect(setTransportOnLine(line, stopOf(line), "walk")).toBe("- 🚶 [A](geo:1,2)");
-    expect(setTransportOnLine(line, stopOf(line), "bus")).toBe(line);
+    expect(setTransportOnLine(line, stopOf(line), "bus")).toBe(line.replace("}}%%", "} }%%"));
   });
   it("keeps a category emoji written after the transport emoji", () => {
     const after = stopOf("- 12:00 🚇 🎭 [Kokugikan Sumo](geo:35.6969,139.7933)");
@@ -220,6 +220,10 @@ describe("moveBlock", () => {
   it("leaves the lines alone for a no-op or bad index", () => {
     expect(moveBlock(lines, 3, 3)).toBe(lines);
     expect(moveBlock(lines, 3, 99)).toBe(lines);
+    // Where the block landed, for the cursor.
+    expect(moveBlockAt(lines, 1, 4)?.at).toBe(5);
+    expect(moveBlockAt(lines, 4, 1)?.at).toBe(1);
+    expect(moveBlockAt(lines, 3, 3)).toBeNull();
   });
 });
 
@@ -228,9 +232,9 @@ describe("two stops on one line", () => {
   it("patches the comment of the stop it was given", () => {
     const [a, b] = parseItinerary(`## 2026-09-16\n${line}`).stops;
     const outB = patchLineMeta(line, { placeId: "B_ID" }, b);
-    expect(outB).toBe('- [A](geo:1,2) %%wf:{"rating":4}%% 到 🚌 [B](geo:3,4) %%wf:{"placeId":"B_ID"}%%');
+    expect(outB).toBe('- [A](geo:1,2) %%wf:{"rating":4}%% 到 🚌 [B](geo:3,4) %%wf:{"placeId":"B_ID" }%%');
     const outA = patchLineMeta(line, { placeId: "A_ID" }, a);
-    expect(outA).toBe('- [A](geo:1,2) %%wf:{"rating":4,"placeId":"A_ID"}%% 到 🚌 [B](geo:3,4)');
+    expect(outA).toBe('- [A](geo:1,2) %%wf:{"rating":4,"placeId":"A_ID" }%% 到 🚌 [B](geo:3,4)');
     const again = parseItinerary(`## 2026-09-16\n${outB}`).stops;
     expect(again[0].meta?.placeId).toBeUndefined();
     expect(again[1].meta?.placeId).toBe("B_ID");
@@ -247,6 +251,8 @@ describe("two stops on one line", () => {
     expect(stopStillAt(line, b)).toBe(true);
     expect(stopStillAt("- x " + line, b)).toBe(false);
     expect(stopStillAt(line.replace("geo:3,4", "geo:3,5"), b)).toBe(false);
+    // Same offsets and pin, different place: renamed while a write was pending.
+    expect(stopStillAt(line.replace("[B]", "[X]"), b)).toBe(false);
   });
 });
 
@@ -332,6 +338,22 @@ describe("retained Google Maps links", () => {
     expect(parseItinerary(changed).stops[0]).toMatchObject({ url, transport: "bus", lat: 35, lng: 139 });
     expect(parseItinerary(patchLineMeta(line, { rating: 4.9 }, b)).stops[0].meta?.rating).toBeUndefined();
     expect(stopStillAt(line.replace("Cafe/@", "Shop/@"), a)).toBe(false);
+  });
+  it("ends every URL in the comment before its closing %% (#8)", () => {
+    // Obsidian's editor reads a bare URL up to the next whitespace; one running into `%%` leaves the comment open.
+    const urlIntoClose = /https?:\/\/\S*%%$/;
+    const text = formatStop("Cafe", 35, 139, undefined, undefined, `${url}/data=%3D%3D`);
+    expect(text).not.toMatch(urlIntoClose);
+    expect(parseItinerary(text).stops[0]).toMatchObject({ url: `${url}/data=%3D%3D`, lat: 35, lng: 139 });
+    const site = patchLineMeta("- [A](geo:1,2)", { website: "https://example.com/" });
+    expect(site).not.toMatch(urlIntoClose);
+    expect(parseItinerary(site).stops[0].meta?.website).toBe("https://example.com/");
+  });
+  it("keeps a %% inside a saved value from closing the comment", () => {
+    const line = patchLineMeta("- [A](geo:1,2) 備註", { address: "Gate }%% East" });
+    expect(line.slice(line.indexOf("%%wf:") + 5, line.lastIndexOf("%%"))).not.toContain("%%");
+    expect(line.endsWith(" 備註")).toBe(true);
+    expect(parseItinerary(line).stops[0].meta?.address).toBe("Gate }%% East");
   });
   it("requires valid saved coordinates and ignores unconverted or unrelated links", () => {
     expect(parseItinerary(`[Cafe](${url})`).stops).toHaveLength(0);
