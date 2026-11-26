@@ -20,6 +20,10 @@ Reading-view source links and facts placed before the helper. Existing
 short-link, stale response, mobile-host and default-mode checks still pass.
 Network responses are mocks; no paid Google key was used.
 
+The planning instructions now preserve geo/source pairs when producing portable
+Markdown or revising an existing plan; the worked example includes one such
+pair. Example Markdown is parsed to check that the helper remains one stop.
+
 Not executed: real desktop Obsidian, Android, Nextcloud rendering/sync and
 physical-device undo. The single editor replacement is checked in smoke,
 but the actual host's undo grouping still needs a device pass.

@@ -77,6 +77,8 @@ These captures combine the real plugin renderer with reconstructed mobile host c
 
 The repo ships a skill that teaches an agent to plan a trip the way this plugin expects: intake, research (hours, closed days, transport, coordinates), day structure, the note itself, and a to-do list at the top of it holding every bed, seat and ticket still unbooked. With it, Claude Code, Codex or any agent that reads skills produces a complete plan you then review on the map.
 
+The skill consists of instructions (`SKILL.md`), the note format (`FORMAT.md`) and a worked example (`EXAMPLE.md`) for an external assistant. The Obsidian plugin works independently and does not run an AI model. Ask the assistant for portable Markdown to use verified geo/source pairs for a plan also read or shared through Nextcloud.
+
 Install it once, from a terminal:
 
 ```bash
