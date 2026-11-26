@@ -449,6 +449,57 @@ md.getMode = () => "source";
 app.vault = deferredVault;
 console.log("smoke: OK (stale drags, renamed stops, duplicate legs and link copies)");
 
+// Geo imports are ordinary links; helpers are never converted again, including
+// after the option is disabled. Exercise actual editor writes and renderers.
+assert(plugin.settings.googleToGeo === false, "geo imports default off for old settings");
+await plugin.settingTabs[0].setControlValue("googleToGeo", true);
+for (const apiKey of ["", "smoke-key"]) {
+  plugin.settings.googleApiKey = apiKey;
+  md.getMode = () => "source";
+  let requests = 0;
+  obsidianStub.requestUrl = async () => { requests++; return details; };
+  const url = "https://www.google.com/maps/place/Hotel/data=!3d35!4d139";
+  openNote("A.md", `## 2027-01-01\n- 09:00 🚲 🏨 [My $& hotel](${url}) book ahead\n    Bring cash`);
+  const original = source;
+  const edits = [];
+  const replace = md.editor.replaceRange;
+  md.editor.replaceRange = (...args) => { edits.push(source); replace(...args); };
+  await plugin.convertAll(md.editor);
+  md.editor.replaceRange = replace;
+  plugin.refresh();
+  const stop = plugin.current.itinerary.stops[0];
+  assert(plugin.current.itinerary.stops.length === 1 && stop.googleUrl === url && !stop.url, "geo pair has one stop with a distinct Google source");
+  assert(source.includes(`[My $& hotel](geo:35,139)`) && source.includes(`([Google Maps](${url}))`), "geo conversion preserves name and exact source URL");
+  assert(source.startsWith("## 2027-01-01\n- 09:00 🚲 🏨 ") && source.endsWith("book ahead\n    Bring cash"), "geo conversion keeps time, transport, category and prose");
+  assert(!source.includes('"lat"') && !source.includes('"locationUrl"'), "geo coordinates are not duplicated in metadata");
+  if (apiKey) assert(stop.meta?.rating === 4.5 && source.indexOf("%%wf:") < source.indexOf("([Google Maps]"), "optional facts belong to the geo link before the source");
+  const converted = source, count = requests;
+  await plugin.convertAll(md.editor);
+  plugin.settings.googleToGeo = false;
+  await plugin.convertAll(md.editor);
+  assert(source === converted && requests === count, "repeated conversion skips helpers even with import option off");
+  assert(edits.length === 1 && edits[0] === original, "conversion is one editor edit, so undo can restore the input");
+  source = converted.replace("[Google Maps]", "[Karte]");
+  await plugin.convertAll(md.editor);
+  assert(requests === count && plugin.current.itinerary.stops[0].googleUrl === url, "helper detection does not depend on its label");
+  const geoAnchor = {
+    textContent: "My $& hotel", attrs: { href: "geo:35,139" },
+    getAttribute(key) { return this.attrs[key]; }, setAttribute(key, value) { this.attrs[key] = value; },
+    setAttr(key, value) { this.attrs[key] = value; }, addClass() {}, insertAdjacentElement() {},
+  };
+  plugin.postProcessors[0]({ querySelectorAll: () => [geoAnchor] }, { getSectionInfo: () => ({ text: source, lineStart: 0, lineEnd: 2 }) });
+  assert(geoAnchor.attrs.href === url, "Reading view opens a geo pair's original Google source");
+  // A separate unresolved Maps stop on the same line must still convert.
+  source += `\n- [Park](geo:36,140) ([Map](https://maps.app.goo.gl/park)) and ${url}`;
+  plugin.settings.googleToGeo = true;
+  await plugin.convertAll(md.editor);
+  plugin.refresh();
+  assert(plugin.current.itinerary.stops.length === 3 && (source.match(/\[Google Maps\]/g) ?? []).length === 1, "paired sources are skipped while adjacent unconverted links are imported");
+}
+plugin.settings.googleToGeo = false;
+plugin.settings.googleApiKey = "smoke-key";
+console.log("smoke: OK (geo imports, named links, exact pins, source pairs, repeat conversion and atomic edits)");
+
 openNote("A.md", note);
 let resolveRequest;
 obsidianStub.requestUrl = () => new Promise((resolve) => { resolveRequest = resolve; });

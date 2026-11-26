@@ -49,6 +49,14 @@ Saved place details and routed legs travel with the note as hidden metadata. Syn
 
 Run **Insert day headings for a trip** to get the headings, then paste links under each. The full date on the heading is what makes weekday, opening-hours and departure checks possible. Indented lines under a stop are its notes. No frontmatter is needed. The complete format is in [FORMAT.md](skills/wayfarer-plan-trip/FORMAT.md). Imported Google Maps links need the updated Wayfarer on each device to appear on the map; older versions only recognize `geo:` stops. The original Maps links work as ordinary Markdown links outside the plugin.
 
+Enable **Convert Google links to geo links** (off by default) to import a coordinate link with the original Maps link beside it:
+
+```markdown
+- [Cafe](geo:35,139) ([Google Maps](https://maps.app.goo.gl/original))
+```
+
+This same-line pair is one stop. The helper's label can be changed or translated; it is recognized by its Google URL and parentheses immediately after the geo link. Map cards and Reading view open the original source. Optional Google details are saved between the geo link and its helper, without duplicating coordinates. Existing pairs remain readable when this setting is off; existing notes are not converted automatically. Links with coordinates can resolve without a key; links containing only a place ID or name can still require one, and blocked short links may require the full Maps URL.
+
 ![Rating and hours chips after each link in Reading view](docs/screenshots/reading.jpg)
 
 ## Following the trip

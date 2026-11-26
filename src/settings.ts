@@ -17,6 +17,8 @@ export interface WayfarerSettings {
   dayHeadingLevel: number;
   /** Convert Google Maps links automatically on paste. */
   convertOnPaste: boolean;
+  /** Import a geo link plus the original Google Maps link. */
+  googleToGeo: boolean;
   /** Prefix converted stops with a category emoji (⛩️ 🍜 🏨 ...). */
   addEmoji: boolean;
   /** The map flies to the stop on the cursor line. */
@@ -38,6 +40,7 @@ export const DEFAULT_SETTINGS: WayfarerSettings = {
   listOpen: true,
   dayHeadingLevel: 2,
   convertOnPaste: true,
+  googleToGeo: false,
   addEmoji: true,
   followCursor: true,
   tileUrl: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -86,6 +89,7 @@ export class WayfarerSettingTab extends PluginSettingTab {
     return [
       { name: "Language", control: { type: "dropdown", key: "uiLanguage", options: { auto: "Follow Obsidian", en: "English", "zh-TW": "繁體中文" } } },
       { name: "Convert map links when pasted", desc: "A pasted link (including maps.app.goo.gl) becomes a place with a pin.", control: { type: "toggle", key: "convertOnPaste" } },
+      { name: "Convert Google links to geo links", desc: "Save coordinates in a geo link and keep the original link beside it. Applies to new conversions.", control: { type: "toggle", key: "googleToGeo" } },
       { name: "Add an emoji to converted places", desc: "⛩️ 🍜 🏨 🚉 based on what the place is. An emoji you typed before the link is kept.", control: { type: "toggle", key: "addEmoji" } },
       { name: "Map follows the line you edit", control: { type: "toggle", key: "followCursor" } },
       { name: "Open the map when a note has places", control: { type: "toggle", key: "autoOpen" } },
@@ -211,6 +215,11 @@ export class WayfarerSettingTab extends PluginSettingTab {
       .setName("Convert map links when pasted")
       .setDesc("A pasted link (including maps.app.goo.gl) becomes a place with a pin.")
       .addToggle((t) => t.setValue(s.convertOnPaste).onChange((v) => { s.convertOnPaste = v; save(); }));
+
+    new Setting(containerEl)
+      .setName("Convert Google links to geo links")
+      .setDesc("Save coordinates in a geo link and keep the original link beside it. Applies to new conversions.")
+      .addToggle((t) => t.setValue(s.googleToGeo).onChange((v) => { s.googleToGeo = v; save(); }));
 
     new Setting(containerEl)
       .setName("Add an emoji to converted places")

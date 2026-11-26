@@ -10,9 +10,10 @@ export function navigateUrl(stop: PlaceTarget, mode?: Transport): string {
   return `https://www.google.com/maps/dir/?${params.toString()}`;
 }
 
-type PlaceTarget = Pick<Stop, "lat" | "lng"> & Partial<Pick<Stop, "name" | "meta" | "url">>;
+type PlaceTarget = Pick<Stop, "lat" | "lng"> & Partial<Pick<Stop, "name" | "meta" | "url" | "googleUrl">>;
 /** Prefer the original business link, then Place ID, then a coordinate-only fallback. */
 export function placeUrl(stop: PlaceTarget): string {
+  if (stop.googleUrl && isGoogleMapsUrl(stop.googleUrl)) return stop.googleUrl;
   if (stop.url && isGoogleMapsUrl(stop.url)) return stop.url;
   if (!stop.meta?.placeId) return `https://www.google.com/maps/search/?api=1&query=${stop.lat},${stop.lng}`;
   const params = new URLSearchParams({ api: "1", query: `${stop.lat},${stop.lng}` });

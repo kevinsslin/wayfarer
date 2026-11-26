@@ -58,6 +58,8 @@ export interface Stop {
   name: string;
   /** Original Google Maps link, when retained during import. */
   url?: string;
+  /** Google source paired with a visible geo link; `url` still means the stop link's own href. */
+  googleUrl?: string;
   lat: number;
   lng: number;
   /** Zero-based line in the note. */
@@ -173,11 +175,12 @@ export function parseItinerary(markdown: string, opts: ParseOptions = {}): Itine
       noteBase = indent;
       if (image === undefined) image = IMAGE.exec(line) ?? imageBelow(lines, i, visible.bare);
       const before = maskMeta(line.slice(prevEnd, link.from));
-      prevEnd = link.to;
+      prevEnd = link.googleTo ?? link.to;
       const name = linkName(link);
       current.stops.push({
         name,
         url: link.url,
+        googleUrl: link.googleUrl,
         lat,
         lng,
         line: i,
@@ -216,6 +219,10 @@ export interface StopLink {
   lat: number;
   lng: number;
   url?: string;
+  googleUrl?: string;
+  /** Span of the parenthesized Google source, including its wrapper. */
+  googleFrom?: number;
+  googleTo?: number;
   from: number;
   to: number;
   meta?: PlaceMeta;
@@ -245,8 +252,18 @@ export function stopLinks(line: string): StopLink[] {
     const lat = geo ? Number(geo[1]) : meta?.lat;
     const lng = geo ? Number(geo[2]) : meta?.lng;
     if (lat === undefined || lng === undefined || !isValidLatLng(lat, lng)) continue;
+    // Only the canonical same-line pair counts. No label/language heuristics,
+    // free prose, intervening links or links on the next line are associated.
+    const next = links[i + 1];
+    const gap = next ? line.slice(to, next.index) : "";
+    const open = geo && next && isGoogleMapsUrl(next[2]) && /^[ \t]*(?:%%wf:\{.*?\}%%[ \t]*)?\([ \t]*$/.test(gap);
+    const close = open ? /^[ \t]*\)/.exec(line.slice(next.index + next[0].length)) : null;
+    const googleFrom = close ? to + gap.lastIndexOf("(") : undefined;
+    const googleTo = close ? next.index + next[0].length + close[0].length : undefined;
     out.push({ name: m[1], lat, lng, url: geo ? undefined : m[2], from, to, meta,
+      googleUrl: close ? next[2] : undefined, googleFrom, googleTo,
       metaFrom: mm ? to + mm.index : undefined, metaTo: mm ? to + mm.index + mm[0].length : undefined });
+    if (close) i++; // The source is part of this stop, even if it has stale coordinate metadata of its own.
   }
   return out;
 }
@@ -412,6 +429,9 @@ function imageBelow(lines: string[], line: number, visible: (string | null)[]): 
 
 /** The line as prose: list marker, time, links (kept as names), meta and images removed. */
 export function plainNote(line: string): string {
+  for (const link of stopLinks(stripComments(line, false).bare).reverse()) {
+    if (link.googleFrom !== undefined) line = line.slice(0, link.googleFrom) + line.slice(link.googleTo);
+  }
   return line
     .replace(/^\s*(?:[-*+]|\d+[.)])\s*/, "")
     .replace(/^\[[ xX]\]\s*/, "")
@@ -527,9 +547,9 @@ export function metaSpan(line: string, linkEnd: number): { start: number; end: n
  * True when the stop's link is still at the offsets the pane parsed it
  * from, so a write computed earlier lands on the stop it was meant for.
  */
-export function stopStillAt(line: string, stop: Pick<Stop, "from" | "to" | "lat" | "lng"> & Partial<Pick<Stop, "url" | "name">>): boolean {
+export function stopStillAt(line: string, stop: Pick<Stop, "from" | "to" | "lat" | "lng"> & Partial<Pick<Stop, "url" | "googleUrl" | "name">>): boolean {
   // The name too: `[Park](geo:35,139)` typed over a same-length `[Cafe](geo:35,139)` keeps every offset.
-  return stopLinks(line).some((link) => link.from === stop.from && link.to === stop.to && link.lat === stop.lat && link.lng === stop.lng && link.url === stop.url
+  return stopLinks(line).some((link) => link.from === stop.from && link.to === stop.to && link.lat === stop.lat && link.lng === stop.lng && link.url === stop.url && link.googleUrl === stop.googleUrl
     && (stop.name === undefined || linkName(link) === stop.name));
 }
 
