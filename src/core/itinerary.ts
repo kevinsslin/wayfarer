@@ -58,6 +58,8 @@ export interface Stop {
   name: string;
   /** Original Google Maps link, when retained during import. */
   url?: string;
+  /** Google source paired with a visible geo link; `url` still means the stop link's own href. */
+  googleUrl?: string;
   lat: number;
   lng: number;
   /** Zero-based line in the note. */
@@ -173,11 +175,12 @@ export function parseItinerary(markdown: string, opts: ParseOptions = {}): Itine
       noteBase = indent;
       if (image === undefined) image = IMAGE.exec(line) ?? imageBelow(lines, i, visible.bare);
       const before = maskMeta(line.slice(prevEnd, link.from));
-      prevEnd = link.to;
+      prevEnd = link.googleTo ?? link.to;
       const name = linkName(link);
       current.stops.push({
         name,
         url: link.url,
+        googleUrl: link.googleUrl,
         lat,
         lng,
         line: i,
@@ -216,6 +219,10 @@ export interface StopLink {
   lat: number;
   lng: number;
   url?: string;
+  googleUrl?: string;
+  /** Span of the adjacent Google source, including any outer parentheses. */
+  googleFrom?: number;
+  googleTo?: number;
   from: number;
   to: number;
   meta?: PlaceMeta;
@@ -245,8 +252,26 @@ export function stopLinks(line: string): StopLink[] {
     const lat = geo ? Number(geo[1]) : meta?.lat;
     const lng = geo ? Number(geo[2]) : meta?.lng;
     if (lat === undefined || lng === undefined || !isValidLatLng(lat, lng)) continue;
+    // Adjacent same-line links are a pair, regardless of the helper's label.
+    // Outer parentheses are optional, including a single leftover parenthesis.
+    // Prose, intervening links and independently imported Google stops stay separate.
+    const next = links[i + 1];
+    const gap = next ? line.slice(to, next.index) : "";
+    const wrapper = /^[ \t]*(?:%%wf:\{.*?\}%%[ \t]*)?(\([ \t]*)?$/.exec(gap);
+    const nextEnd = next ? next.index + next[0].length : to;
+    const close = /^[ \t]*\)/.exec(line.slice(nextEnd));
+    const following = links[i + 2];
+    const ownMeta = parseMeta(META.exec(line.slice(nextEnd, following?.index ?? line.length).split("\n")[0])?.[1] ?? "");
+    const independent = ownMeta?.locationUrl !== undefined || ownMeta?.lat !== undefined || ownMeta?.lng !== undefined;
+    const ambiguous = !close && following && isGoogleMapsUrl(following[2]) && /^[ \t]*$/.test(line.slice(nextEnd, following.index));
+    const paired = geo && next && isGoogleMapsUrl(next[2]) && wrapper && !ambiguous
+      && (wrapper[1] || close || !independent);
+    const googleFrom = paired ? next.index - (wrapper[1]?.length ?? 0) : undefined;
+    const googleTo = paired ? nextEnd + (close?.[0].length ?? 0) : undefined;
     out.push({ name: m[1], lat, lng, url: geo ? undefined : m[2], from, to, meta,
+      googleUrl: paired ? next[2] : undefined, googleFrom, googleTo,
       metaFrom: mm ? to + mm.index : undefined, metaTo: mm ? to + mm.index + mm[0].length : undefined });
+    if (paired) i++; // The source is part of this stop, not another place to import.
   }
   return out;
 }
@@ -412,6 +437,9 @@ function imageBelow(lines: string[], line: number, visible: (string | null)[]): 
 
 /** The line as prose: list marker, time, links (kept as names), meta and images removed. */
 export function plainNote(line: string): string {
+  for (const link of stopLinks(stripComments(line, false).bare).reverse()) {
+    if (link.googleFrom !== undefined) line = line.slice(0, link.googleFrom) + line.slice(link.googleTo);
+  }
   return line
     .replace(/^\s*(?:[-*+]|\d+[.)])\s*/, "")
     .replace(/^\[[ xX]\]\s*/, "")
@@ -494,7 +522,7 @@ const TRANSPORT_TOKEN = /\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictogra
  * one is inserted right before the link. A legacy `via` in the metadata is
  * dropped so the text is the only place the choice lives. Nothing else moves.
  */
-export function setTransportOnLine(line: string, stop: Pick<Stop, "from" | "to" | "beforeFrom">, mode: Transport): string {
+export function setTransportOnLine(line: string, stop: Pick<Stop, "from" | "to" | "beforeFrom">, mode: Transport, storeMetadata = true): string {
   const emoji = TRANSPORT_EMOJI[mode];
   // An emoji inside a comment or inline code is the user's text, not the stop's transport.
   const before = maskMeta(stripComments(line, false).bare.slice(stop.beforeFrom, stop.from));
@@ -506,6 +534,7 @@ export function setTransportOnLine(line: string, stop: Pick<Stop, "from" | "to" 
     break;
   }
   if (out === null) out = line.slice(0, stop.from) + emoji + " " + line.slice(stop.from);
+  if (!storeMetadata) return out; // An explicit transport edit changes prose only; saved comments stay byte for byte.
   // The edit sits before the link, so the link end moves by the size difference.
   const at = { to: stop.to + (out.length - line.length) };
   // A route saved for another mode is stale now; drop it rather than leave it behind.
@@ -527,9 +556,9 @@ export function metaSpan(line: string, linkEnd: number): { start: number; end: n
  * True when the stop's link is still at the offsets the pane parsed it
  * from, so a write computed earlier lands on the stop it was meant for.
  */
-export function stopStillAt(line: string, stop: Pick<Stop, "from" | "to" | "lat" | "lng"> & Partial<Pick<Stop, "url" | "name">>): boolean {
+export function stopStillAt(line: string, stop: Pick<Stop, "from" | "to" | "lat" | "lng"> & Partial<Pick<Stop, "url" | "googleUrl" | "name">>): boolean {
   // The name too: `[Park](geo:35,139)` typed over a same-length `[Cafe](geo:35,139)` keeps every offset.
-  return stopLinks(line).some((link) => link.from === stop.from && link.to === stop.to && link.lat === stop.lat && link.lng === stop.lng && link.url === stop.url
+  return stopLinks(line).some((link) => link.from === stop.from && link.to === stop.to && link.lat === stop.lat && link.lng === stop.lng && link.url === stop.url && link.googleUrl === stop.googleUrl
     && (stop.name === undefined || linkName(link) === stop.name));
 }
 

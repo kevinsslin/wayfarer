@@ -49,6 +49,20 @@ Saved place details and routed legs travel with the note as hidden metadata. Syn
 
 Run **Insert day headings for a trip** to get the headings, then paste links under each. The full date on the heading is what makes weekday, opening-hours and departure checks possible. Indented lines under a stop are its notes. No frontmatter is needed. The complete format is in [FORMAT.md](skills/wayfarer-plan-trip/FORMAT.md). Imported Google Maps links need the updated Wayfarer on each device to appear on the map; older versions only recognize `geo:` stops. The original Maps links work as ordinary Markdown links outside the plugin.
 
+Enable **Convert Google links to geo links** (off by default) to import a coordinate link with the original Maps link beside it:
+
+```markdown
+- [Cafe](geo:35,139) [🗺️](https://maps.app.goo.gl/original)
+```
+
+This same-line pair is one stop. **Google Maps link label** chooses the text or emoji for new conversions (default `🗺️`, for example `Maps` or `(🗺️)`). The helper is recognized by its Google URL immediately after the geo link, independent of its label. Existing `([Google Maps](URL))` pairs remain supported, even if one or both outer parentheses are removed. Map cards and Reading view open the original source. Optional Google details are saved between the geo link and its helper, without duplicating coordinates. Existing pairs remain readable when this setting is off; changing settings does not rewrite notes. Prose, a newline or an intervening link separates independent links; an adjacent Google stop with its own saved coordinates remains independent unless explicitly wrapped as a source. Links with coordinates can resolve without a key; links containing only a place ID or name can still require one, and blocked short links may require the full Maps URL.
+
+**Store metadata in notes** is on by default. Turn it off to keep new Google details and routes only in memory for the current plugin session. This automatically enables geo conversion and prevents turning it off while storage is off. Reenabling storage leaves geo conversion enabled. Existing comments are still read and left as written, including during transport edits; no automatic migration or cleanup occurs.
+
+With storage off, imported facts and **Fetch Google details for stops without them** still feed map cards, photos, timeline and time checks. That command explicitly refreshes session details; identical concurrent requests are shared and failed requests pause before retrying. Reparsing or moving stops does not lose their facts. Restarting the plugin clears them; fetch again when online. Offline, the note's coordinates, times, text and straight-line connections remain usable. No replacement cache files or other persistent store are created for these facts. The API key remains in plugin settings as before. Existing inline rating/hours chips in Live Preview and Reading view show saved comments only; session-only details are shown in the map view.
+
+Fetched facts are snapshots of Google's response, not guaranteed live information. Routes and photos reuse session caches, and neither a redraw nor reopening a note refreshes everything. Existing saved comments may still show older facts; turning storage off does not remove them.
+
 ![Rating and hours chips after each link in Reading view](docs/screenshots/reading.jpg)
 
 ## Following the trip
@@ -68,6 +82,8 @@ These captures combine the real plugin renderer with reconstructed mobile host c
 ## Planning with an AI assistant
 
 The repo ships a skill that teaches an agent to plan a trip the way this plugin expects: intake, research (hours, closed days, transport, coordinates), day structure, the note itself, and a to-do list at the top of it holding every bed, seat and ticket still unbooked. With it, Claude Code, Codex or any agent that reads skills produces a complete plan you then review on the map.
+
+The skill consists of instructions (`SKILL.md`), the note format (`FORMAT.md`) and a worked example (`EXAMPLE.md`) for an external assistant. The Obsidian plugin works independently and does not run an AI model. Ask the assistant for portable Markdown to use verified geo/source pairs for a plan also read or shared through Nextcloud.
 
 Install it once, from a terminal:
 

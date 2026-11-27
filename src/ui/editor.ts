@@ -22,7 +22,8 @@ function urlSpans(visible: string | null): { url: string; from: number; to: numb
   while ((m = re.exec(text))) {
     const url = m[0].replace(/[),.;!?]+$/, "");
     const index = m.index;
-    if (converted.some((link) => link.url && index >= link.from && index < link.to)) continue;
+    if (converted.some((link) => (link.url && index >= link.from && index < link.to)
+      || (link.googleFrom !== undefined && index >= link.googleFrom && index < link.googleTo!))) continue;
     out.push({ url, from: index, to: index + url.length });
   }
   return out;
@@ -39,10 +40,18 @@ export function findMapsUrl(visible: string | null, skip?: Set<string>): { url: 
 }
 
 /** The line should be replaced in place; returns the new text for the span. */
-export function stopText(place: ResolvedPlace, withEmoji = true): string {
+export function stopText(place: ResolvedPlace, withEmoji = true, googleToGeo = false, googleLinkLabel = "🗺️", storeMetadata = true): string {
   const cat = pickCategory({ googleType: place.meta?.type, name: place.name });
   const emoji = withEmoji && cat !== "place" ? CATEGORY_EMOJI[cat] : undefined;
-  return formatStop(place.name, place.lat, place.lng, place.meta, emoji, place.url);
+  if (!storeMetadata) googleToGeo = true;
+  if (!googleToGeo || !place.url) return formatStop(place.name, place.lat, place.lng, place.meta, emoji, place.url);
+  // The geo link owns its facts; coordinates and the source already live in ordinary links.
+  const { lat: _lat, lng: _lng, locationUrl: _url, ...meta } = storeMetadata ? place.meta ?? {} : {};
+  const stop = formatStop(place.name, place.lat, place.lng, meta, emoji);
+  const url = place.url.replace(/\(/g, "%28").replace(/\)/g, "%29");
+  // Keep a label from introducing a new link, line, code span or hidden comment.
+  const label = googleLinkLabel.replace(/[\r\n\t]+/g, " ").replace(/[[\]\\`%<>]/g, "").trim() || "🗺️";
+  return `${stop} [${label}](${url})`;
 }
 
 /**
@@ -53,7 +62,7 @@ export function stopText(place: ResolvedPlace, withEmoji = true): string {
  * before it on its line (`prefix`). Another copy of the link, or a longer URL
  * that starts the same way, is left alone.
  */
-export function replaceUrlInEditor(editor: Editor, line: number, url: string, prefix: string, replacement: string): boolean {
+export function replaceUrlInEditor(editor: Editor, line: number, url: string, prefix: string, replacement: string, storeMetadata = true): boolean {
   const visible = visibleLines(editor.getValue().split("\n")).bare;
   const search = (ln: number): boolean => {
     if (ln < 0 || ln >= editor.lineCount()) return false;
@@ -63,11 +72,17 @@ export function replaceUrlInEditor(editor: Editor, line: number, url: string, pr
     // `[label](url)`: the whole link goes, and the user's label stays as the stop's name.
     const link = /\[([^\]]*)\]\($/.exec(prefix);
     if (link && text[idx + url.length] === ")") {
-      const named = link[1] ? replacement.replace(/\[[^\]]*\]\(/, () => `[${link[1].replace(/[[\]]/g, "")}](`) : replacement;
+      let named = link[1] ? replacement.replace(/\[[^\]]*\]\(/, () => `[${link[1].replace(/[[\]]/g, "")}](`) : replacement;
       const linkEnd = idx + url.length + 1;
       const existing = metaSpan(text, linkEnd);
-      // Re-resolving an edited href replaces the stale coordinates and facts.
       const between = existing ? text.slice(linkEnd, existing.start) : "";
+      if (existing && !storeMetadata) {
+        // An explicit reconversion may replace a stale href, but must leave
+        // existing comments as written and attached to the primary geo link.
+        const end = stopLinks(named)[0]?.to ?? named.length;
+        named = named.slice(0, end) + " " + text.slice(existing.start, existing.end) + named.slice(end);
+      }
+      // Re-resolving an edited href replaces the stale coordinates and facts.
       editor.replaceRange(named + between, { line: ln, ch: idx - link[0].length }, { line: ln, ch: existing?.end ?? linkEnd });
       return true;
     }

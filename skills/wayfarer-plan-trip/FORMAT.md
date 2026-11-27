@@ -47,6 +47,7 @@ Not planned day by day yet. Staying in the city over the long weekend.
 | `## To do` or any heading without a date | Once the note has dated headings, an undated section is not a day: its links stay in the text and do not appear on the map, wherever it sits in the note. Text before the first heading is treated the same way. The to-do checklist goes at the top, above the days, because that is what gets read first. |
 | `## 2026-09-19 ~ 2026-09-26 Tokyo` | A range: several days kept as one block, for a stretch not yet planned day by day. Two full dates joined by `~`, `～`, `-`, `to` or `到`. One chip (`9/19~9/26`), no weekday checks. Split it into day headings once the days are decided. |
 | `[Name](geo:lat,lng)` | A coordinate-only stop. Same format as the Map View plugin. |
+| `[Name](geo:lat,lng) [🗺️](URL)` | One stop with its original Google source. The helper immediately follows the geo link on the same line (optional `%%wf` facts go before it). **Google Maps link label** controls new imports; preserve an existing note's labels. Legacy `([Google Maps](URL))` and one-sided outer parentheses remain readable. Prose, newlines and intervening links separate independent links; a Google stop with its own saved coordinate metadata remains independent without an explicit outer wrapper. Produced by **Convert Google links to geo links**, off by default; recognized regardless of that setting. |
 | `[Name](Google Maps URL)` with saved coordinate metadata | An imported stop whose name still opens the original Google Maps place. The plugin writes the coordinate metadata during conversion. |
 | `07:53` at line start | The stop's time, local time at that place. |
 | Transport emoji before the link | How you get there: 🚶 walk, 🚲 bike, 🚗 car, 🚕 taxi, 🚌 bus, 🚆 🚄 🚃 train, 🚇 metro, 🚊 tram, ⛴️ boat, ✈️ flight. Words are not read. Picking a transport on a desktop timeline arrow or via **Change transport** in a stop’s details writes this emoji before the link (replacing the one there). It is the only place the transport lives. A leg runs from the previous stop of the same day, so the first stop of a day has none and nothing is drawn between days. |
@@ -58,3 +59,16 @@ Not planned day by day yet. Staying in the city over the long weekend.
 | `![[img.jpg]]` or image URL on the line or the next | Photo in the card. |
 | `%%wf:{…}%%` after a link | Plugin metadata: Google details (rating, hours, address, photo, UTC offset) and the last routed leg. Includes coordinates for imported Google Maps links. Written by the plugin, never by hand. Leave it as is. |
 | Full Google Maps URL | Converted to a stop when pasted or via the convert command; the original URL stays clickable. Short `maps.app.goo.gl` links can be expanded on desktop and mobile; use the full place URL when expansion is unavailable. |
+
+**Store metadata in notes** defaults to on. When off, new imports use geo/source pairs;
+Google details and routes are kept only for the plugin session. The note remains the
+source for coordinates, names, times, transport and prose. Existing `%%wf` comments
+are still read and are not rewritten or removed automatically. Session-only facts
+appear on the map, not as new inline metadata chips. Restarting loses those facts;
+request details again when online. Do not add substitute YAML or cache files.
+
+Session-only does not mean continuously live. The details command can request
+place facts again (subject to error backoff); routes and photos reuse session
+caches. Redraws and reopening a note do not automatically refresh everything.
+Existing saved comments may still contain older facts, and a new Google response
+does not guarantee that venue information is current.
