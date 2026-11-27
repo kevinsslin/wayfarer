@@ -84,6 +84,8 @@ export interface Stop {
   /** Index within its day, zero-based. */
   index: number;
   dayIndex: number;
+  /** This source stop belongs to the optional overview projection. */
+  overview?: true;
 }
 
 export interface Day {
@@ -111,6 +113,8 @@ export interface Itinerary {
   days: Day[];
   /** Every stop in document order. */
   stops: Stop[];
+  /** Direct stops under the configured parent headings, kept separate from daily routes. */
+  overview?: Itinerary;
 }
 
 export interface ParseOptions {
@@ -120,6 +124,8 @@ export interface ParseOptions {
    * level, any heading up to it counts, so a note written with `#` days works.
    */
   maxHeadingLevel?: number;
+  /** Optional overview heading level, strictly shallower than the day level. Off by default. */
+  overviewHeadingLevel?: number;
 }
 
 import { isGoogleMapsUrl, isValidLatLng } from "./gmaps-url";
@@ -136,14 +142,27 @@ const IMAGE = /!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]|!\[[^\]]*\]\((\S+?)\)/;
 
 export function parseItinerary(markdown: string, opts: ParseOptions = {}): Itinerary {
   const maxLevel = opts.maxHeadingLevel ?? 2;
+  const overviewLevel = opts.overviewHeadingLevel ?? 0;
+  const layered = Number.isInteger(overviewLevel) && overviewLevel > 0 && overviewLevel < maxLevel && maxLevel <= 6;
+  const itinerary = parseLayer(markdown, maxLevel, layered);
+  if (layered) {
+    itinerary.overview = parseLayer(markdown, overviewLevel, true, true);
+    for (const stop of itinerary.overview.stops) stop.overview = true;
+  }
+  return itinerary;
+}
+
+/** With bounded sections, shallower headings close a day; direct sections exclude all child headings. */
+function parseLayer(markdown: string, maxLevel: number, bounded = false, direct = false): Itinerary {
   const lines = markdown.split("\n");
   const visible = visibleLines(lines);
-  const hasExact = headingLevels(visible.text).has(maxLevel);
+  const hasExact = bounded || headingLevels(visible.text).has(maxLevel);
   const isDayHeading = (level: number) => (hasExact ? level === maxLevel : level <= maxLevel);
   const days: Day[] = [];
   let current: Day = { title: "", headingLine: -1, endLine: lines.length, stops: [], index: -1, label: "", date: null, dateEnd: null };
   // Indent of the last stop line; deeper lines right under it are its notes, whatever they contain.
   let noteBase: number | null = null;
+  let accepting = !bounded;
 
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i];
@@ -154,13 +173,17 @@ export function parseItinerary(markdown: string, opts: ParseOptions = {}): Itine
     if (!raw.trim()) noteBase = null;
 
     const h = HEADING.exec(prose);
-    if (h && isDayHeading(h[1].length)) {
+    if (h && (isDayHeading(h[1].length) || (bounded && h[1].length < maxLevel))) {
       current.endLine = i;
       days.push(current);
-      current = { title: h[2], headingLine: i, endLine: lines.length, stops: [], index: -1, label: dayLabel(h[2]), date: dayDate(h[2]), dateEnd: dayDateEnd(h[2]) };
+      accepting = isDayHeading(h[1].length);
+      const title = accepting ? h[2] : "";
+      current = { title, headingLine: i, endLine: lines.length, stops: [], index: -1, label: dayLabel(title), date: dayDate(title), dateEnd: dayDateEnd(title) };
       noteBase = null;
       continue;
     }
+    if (bounded && direct && h) { accepting = false; noteBase = null; }
+    if (!accepting) continue;
     const indent = indentWidth(line);
     if (noteBase !== null && indent > noteBase) continue;
     noteBase = null;

@@ -33,9 +33,10 @@ Prefer official sites and current timetables. Name a source only where the user 
 
 ## 3. Structure the days
 
+- Keep the configured day heading level (default `##`). Only when the user has enabled **Trip overview heading level**, parent headings can group days, for example `##` stages and `###` days. Put the stage's own city/base pins directly below its heading, then the daily headings. A parent hotel is optional in each day, not implicitly added to it. Preserve existing heading structure when revising a plan. See [Trip overview](../../docs/trip-overview.md).
 - Cluster by geography and by opening hours. A day's stops should be walkable or one transit ride apart.
 - Anchor each day on its fixed-time items (a departure, a reservation, a last entry) and fill around them, moving outward in the morning and back toward the night's hotel.
-- Give each day a theme in its heading (`## 2026-09-17 Thu Up to Senjogahara, sleep at Yumoto`) and make the night's hotel its last stop.
+- Give each day a theme in its heading (`## 2026-09-17 Thu Up to Senjogahara, sleep at Yumoto`). For a flat plan, make the night's hotel its last stop. With an overview, keep the base under its parent heading and repeat it in a day when that route needs it.
 - Four to six stops is a full day for most people. Leave slack after long transfers and before fixed times.
 - A stretch the user has not decided yet stays one range heading (`## 2026-09-19 ~ 2026-09-26 Tokyo`) with a line saying what is undecided. Do not invent a per-day schedule to fill it.
 - For any stretch with a real choice (this base or that one, mountain or coast, day trip or not), decide, and keep the runner-up as a written backup with the trigger that would switch to it (weather, a closure, a sold-out train).
