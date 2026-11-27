@@ -77,6 +77,8 @@ export interface Stop {
   transport?: Transport;
   /** The line's prose with links reduced to their names and markup removed. */
   note: string;
+  /** Card prose without this place's link label; the original prose is kept for exports. */
+  description?: string;
   /** Indented lines right under the stop, verbatim: the user's notes for it. */
   notes: string[];
   /** Image on the same line or the line after: a vault `![[file]]` link or a URL. */
@@ -168,7 +170,10 @@ export function parseItinerary(markdown: string, opts: ParseOptions = {}): Itine
     let prevEnd = 0;
     const time = TIME.exec(line)?.[1];
     let image: RegExpExecArray | null | undefined;
-    for (const link of stopLinks(line)) {
+    const links = stopLinks(line);
+    if (!links.length) continue;
+    const note = plainNote(prose);
+    for (const link of links) {
       const { lat, lng, meta } = link;
       noteBase = indent;
       if (image === undefined) image = IMAGE.exec(line) ?? imageBelow(lines, i, visible.bare);
@@ -190,7 +195,9 @@ export function parseItinerary(markdown: string, opts: ParseOptions = {}): Itine
         time,
         // The emoji in the text is what everyone reads, so it wins; `via` is only read from older notes.
         transport: transportEmoji(before) ?? meta?.via ?? undefined,
-        note: plainNote(prose),
+        note,
+        // Keep multi-place sentences intact; a single place already has its own card title.
+        description: links.length === 1 ? cardDescription(prose, link, time) : undefined,
         notes: continuationLines(lines, i, visible.text),
         image: image ? (image[1] ?? image[2]) : undefined,
         index: current.stops.length,
@@ -424,6 +431,19 @@ export function plainNote(line: string): string {
     .replace(/\s{2,}/g, " ")
     .trim()
     .replace(/^\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*\s*/u, "");
+}
+
+/** Remove only this standalone link label and its leading time/emoji decoration. */
+function cardDescription(line: string, link: StopLink, time?: string): string | undefined {
+  // A label joined to a word (e.g. [Fort](geo:...)ress) is part of that word.
+  if (/[\p{L}\p{N}\p{M}]/u.test((line[link.from - 1] ?? "") + (line[link.to] ?? ""))) return undefined;
+  let before = plainNote(line.slice(0, link.from));
+  if (time) before = before.replace(time, " ");
+  before = before.replace(/\s+/g, " ").trim().replace(/^(?:[\p{Extended_Pictographic}\p{Emoji_Modifier}\uFE0F\u200D]\s*)+/u, "");
+  // A temporary label keeps the link/source pair recognizable and protects the
+  // description's own leading emoji. It is removed before returning the prose.
+  const after = plainNote(line.slice(link.from).replace(/^\[[^\]]*\]/, "[.]")).slice(1).trim();
+  return [before, after].filter(Boolean).join(" ");
 }
 
 /** Which day (by index) contains the given zero-based line, or -1. */
@@ -665,11 +685,12 @@ function round(n: number): string {
 }
 
 /**
- * The user's notes for a stop, verbatim: its line as prose (time removed,
- * the place name kept where it was written), then the indented lines under
- * it. A line that is nothing but the name adds nothing.
+ * The stop's prose followed by its indented notes. Cards omit the place's
+ * standalone link label, since their heading shows it, and leading time/emoji.
+ * Exports keep the original prose. Never change the parsed stop or notes.
  */
-export function stopNotes(stop: Stop): string[] {
+export function stopNotes(stop: Stop, forCard = false): string[] {
+  if (forCard && stop.description !== undefined) return stop.description ? [stop.description, ...stop.notes] : [...stop.notes];
   let line = stop.note;
   if (stop.time) line = line.replace(stop.time, " ");
   line = line.replace(/\s+/g, " ").trim();

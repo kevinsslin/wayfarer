@@ -522,7 +522,7 @@ export class WayfarerView extends ItemView {
     const today = date ? hoursForWeekday(stop.meta?.hours, date.getDay()) : null;
     if (today) facts.push(today.replace(/^[^:]+:\s*/, ""));
     if (facts.length) body.createDiv({ cls: "wf-card-facts", text: facts.join(" · ") });
-    for (const n of stopNotes(stop)) body.createDiv({ cls: "wf-card-note", text: n });
+    for (const n of stopNotes(stop, true)) body.createDiv({ cls: "wf-card-note", text: n });
     if (stop.meta?.address) body.createDiv({ cls: "wf-card-addr", text: stop.meta.address });
     const actions = body.createDiv({ cls: "wf-card-actions" });
     actions.createEl("a", { cls: "wf-ext", text: t("open_gmaps"), attr: { href: placeUrl(stop) } });
@@ -727,7 +727,7 @@ export class WayfarerView extends ItemView {
         main.createSpan({ cls: "wf-stop-glyph", text: stop.emoji ?? CATEGORY_EMOJI[stop.category] });
         main.createSpan({ cls: "wf-stop-name", text: stop.name });
         const warn = this.hoursWarning(stop, date);
-        const notes = stopNotes(stop);
+        const notes = stopNotes(stop, true);
         // The chosen card is the unfolded one; choosing another folds it back. No toggles to click.
         const open = stop === this.focused;
         card.toggleClass("is-open", open);
