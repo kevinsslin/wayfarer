@@ -61,6 +61,8 @@ This same-line pair is one stop. **Google Maps link label** chooses the text or 
 
 With storage off, imported facts and **Fetch Google details for stops without them** still feed map cards, photos, timeline and time checks. That command explicitly refreshes session details; identical concurrent requests are shared and failed requests pause before retrying. Reparsing or moving stops does not lose their facts. Restarting the plugin clears them; fetch again when online. Offline, the note's coordinates, times, text and straight-line connections remain usable. No replacement cache files or other persistent store are created for these facts. The API key remains in plugin settings as before. Existing inline rating/hours chips in Live Preview and Reading view show saved comments only; session-only details are shown in the map view.
 
+Fetched facts are snapshots of Google's response, not guaranteed live information. Routes and photos reuse session caches, and neither a redraw nor reopening a note refreshes everything. Existing saved comments may still show older facts; turning storage off does not remove them.
+
 ![Rating and hours chips after each link in Reading view](docs/screenshots/reading.jpg)
 
 ## Following the trip

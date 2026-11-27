@@ -1,6 +1,6 @@
 # Optional note metadata persistence
 
-Base: `feature/google-to-geo` at `793b796` (upstream PR #12). This feature depends on the geo
+Base: `feature/google-to-geo` at `7327b2f` (upstream PR #12). This feature depends on the geo
 import format and its parser/source association. Its isolated diff is
 `feature/google-to-geo...feature/no-note-metadata`; against upstream main the
 second PR also includes A until A is merged. Do not describe it as independent.
@@ -35,8 +35,8 @@ automatic details request on redraw, hover or reopening a note.
 ## Verification
 
 Node 24.22.3, pnpm 9.12.3; frozen lockfile installation. `pnpm check` passes:
-ESLint, CSS lint, TypeScript, 171 unit tests, production build and bundle smoke.
-The upstream baseline passed 161 tests; feature A passed 165 separately.
+ESLint, CSS lint, TypeScript, 181 unit tests, production build and bundle smoke.
+The upstream baseline passed 161 tests; feature A passed 175 separately.
 Google responses are mocked. No real key or private vault was used.
 
 - Cache unit tests: concurrent deduplication, reparse/reorder identity, explicit
@@ -54,6 +54,9 @@ Google responses are mocked. No real key or private vault was used.
 - Late import facts are discarded when the Google key is changed/removed or
   request language changes before the response. The geo/source pair still
   imports without comments; those old facts cannot enter the new context.
+- The AI planning guide and format reference distinguish durable Markdown
+  from session facts and describe explicit place refresh, session reuse and
+  older saved comments without promising continuously live Google data.
 - Existing default-mode tests, Reading view, Live Preview decoration tests,
   stale-write and mobile-host stubs remain green. `git diff --check` passes.
 
@@ -78,3 +81,8 @@ the note stays free of new `%%wf` comments. Reopen/reorder, go offline, restart
 and reconnect. Check Reading / Live Preview / Source on desktop and Android.
 Sync the same note to Nextcloud and check readable text and the clickable
 Google source there; fetching session details should create no file versions.
+
+Rebased on the configurable source-label update in the geo-import branch. New
+imports use the same unwrapped map-emoji helper, while legacy wrappers and
+missing outer parentheses remain readable. Both features pass the complete
+check together (181 unit tests plus expanded bundle smoke).

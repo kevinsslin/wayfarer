@@ -66,3 +66,9 @@ source for coordinates, names, times, transport and prose. Existing `%%wf` comme
 are still read and are not rewritten or removed automatically. Session-only facts
 appear on the map, not as new inline metadata chips. Restarting loses those facts;
 request details again when online. Do not add substitute YAML or cache files.
+
+Session-only does not mean continuously live. The details command can request
+place facts again (subject to error backoff); routes and photos reuse session
+caches. Redraws and reopening a note do not automatically refresh everything.
+Existing saved comments may still contain older facts, and a new Google response
+does not guarantee that venue information is current.

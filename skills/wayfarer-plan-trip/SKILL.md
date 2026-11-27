@@ -77,6 +77,10 @@ Write in the user's language. Keep sentences short and concrete; the user reads 
 
 Keep the handback brief. Open the note with the Wayfarer map beside it; run **Convert every map link in this note** for any URLs you left. With a Google API key, **Fetch Google details for stops without them** adds hours and photos. It also checks your coordinates: a stop it reports as "not found at the pin" has no place of that name within 300 m, so its coordinates are probably wrong. Choose transport on the desktop timeline arrows or via **Change transport** in a stop’s details on mobile. Start with the to-do list, unbooked nights first. Point out red legs (two written times too close for the leg between them), "closed that day" chips, and what you could not confirm.
 
+For a metadata-free plan shared through another Markdown reader, write ordinary geo/source pairs and explain **Store metadata in notes**: turning it off requires geo conversion, leaves existing comments as written and keeps new Google facts only for the plugin session. Never put substitute API caches in YAML, sidecar files or hidden comments.
+
+Describe fetched details as snapshots, not guaranteed live data. With storage on, the details command fills missing details; with storage off, it explicitly requests session details again, subject to error backoff. Routes and photos reuse session caches, and reopening a note does not automatically refresh everything. A plugin restart clears session facts; existing saved comments may still contain older data. Keep uncertain or time-sensitive facts in the recheck checklist.
+
 ## Rules
 
 - Never write `%%wf:{…}%%` comments; the plugin owns them.
