@@ -629,6 +629,28 @@ const reconverted = source;
 await plugin.convertAll(md.editor);
 assert(source === reconverted && source.includes("book ahead") && source.endsWith("tail text"), "reconversion with existing prose is idempotent and preserves surrounding text");
 
+// An import's facts belong to the Google context that fetched them, even
+// though the durable geo/source pair remains useful after a settings change.
+const importSettings = { key: plugin.settings.googleApiKey, language: plugin.settings.languageCode };
+for (const change of ["key", "language", "removed-key"]) {
+  plugin.settings.googleApiKey = `import-${change}`;
+  plugin.settings.languageCode = "en";
+  openNote("ImportContext.md", `## 2027-01-01\n- [Context hotel](${sourceUrl})`);
+  let releaseImport;
+  obsidianStub.requestUrl = () => new Promise((resolve) => { releaseImport = resolve; });
+  const pending = plugin.convert(md.editor, 1, sourceUrl, "- [Context hotel](");
+  if (change === "language") plugin.settings.languageCode = "de";
+  else plugin.settings.googleApiKey = change === "key" ? "new-key" : "";
+  releaseImport(sessionDetails);
+  await pending;
+  plugin.refresh();
+  const stop = plugin.current.itinerary.stops[0];
+  assert(stop?.lat === 35 && stop.googleUrl === sourceUrl && !source.includes("%%wf:"), `late import keeps its durable pair after ${change} changes`);
+  assert(!stop.meta?.rating && !stop.meta?.photo, `late import cannot seed session facts under changed ${change}`);
+}
+plugin.settings.googleApiKey = importSettings.key;
+plugin.settings.languageCode = importSettings.language;
+
 // A route still supplies duration/geometry and is reused after reparsing;
 // its onRouted callback must not create a note comment.
 let routeRequests = 0;

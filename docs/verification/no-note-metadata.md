@@ -51,6 +51,9 @@ Google responses are mocked. No real key or private vault was used.
 - Follow-up review: reconversion with user prose before an old comment keeps
   that prose outside the geo/source pair, preserves the comment verbatim and
   remains a single stop through repeated bulk conversion.
+- Late import facts are discarded when the Google key is changed/removed or
+  request language changes before the response. The geo/source pair still
+  imports without comments; those old facts cannot enter the new context.
 - Existing default-mode tests, Reading view, Live Preview decoration tests,
   stale-write and mobile-host stubs remain green. `git diff --check` passes.
 

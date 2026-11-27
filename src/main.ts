@@ -556,6 +556,8 @@ export default class WayfarerPlugin extends Plugin {
     const file = this.editorFile(editor);
     const valid = () => !this.unloaded && !!file && this.editorFile(editor) === file;
     if (!valid()) return false;
+    const apiKey = this.settings.googleApiKey;
+    const language = this.googleLanguageCode;
     try {
       const place = await resolveMapsUrl(url, this.resolveDeps());
       if (!valid()) return false;
@@ -563,7 +565,8 @@ export default class WayfarerPlugin extends Plugin {
       const persist = this.settings.storeMetadata;
       const formatted = stopText(place, this.settings.addEmoji && !hasEmoji, this.settings.googleToGeo || !persist, this.settings.googleLinkLabel, persist);
       if (replaceUrlInEditor(editor, line, url, prefix, formatted, persist)) {
-        if (!persist && place.meta) {
+        // A late import must not seed facts under a different key or language.
+        if (!persist && place.meta && this.settings.googleApiKey === apiKey && this.googleLanguageCode === language) {
           const source = place.url?.replace(/\(/g, "%28").replace(/\)/g, "%29");
           for (const stop of parseItinerary(editor.getValue(), { maxHeadingLevel: this.settings.dayHeadingLevel }).stops) {
             if (stop.googleUrl === source && distanceM(stop, place) < 1) this.details.remember(stop, place.meta);
