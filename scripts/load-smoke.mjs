@@ -619,11 +619,15 @@ assert(plugin.current.itinerary.stops[0].meta.rating === 3.2, "existing comments
 // existing comment exactly as written and associated with the new geo link.
 md.getMode = () => "source";
 const preserved = '%%wf:{"lat":1,"lng":2,"locationUrl":"old","rating":3.1,"custom":"keep"}%%';
-openNote("Edited.md", `## 2027-01-01\n- [Mine](${sourceUrl}) ${preserved}`);
+openNote("Edited.md", `## 2027-01-01\n- [Mine](${sourceUrl}) book ahead ${preserved} tail text`);
 obsidianStub.requestUrl = async () => sessionDetails;
 await plugin.convertAll(md.editor);
 plugin.refresh();
 assert(source.includes(preserved) && plugin.current.itinerary.stops[0].lat === 35, "explicit reconversion preserves old comments and uses the new geo pin");
+assert(plugin.current.itinerary.stops.length === 1 && plugin.current.itinerary.stops[0].googleUrl === sourceUrl, "prose before old metadata stays outside the canonical geo/source pair");
+const reconverted = source;
+await plugin.convertAll(md.editor);
+assert(source === reconverted && source.includes("book ahead") && source.endsWith("tail text"), "reconversion with existing prose is idempotent and preserves surrounding text");
 
 // A route still supplies duration/geometry and is reused after reparsing;
 // its onRouted callback must not create a note comment.

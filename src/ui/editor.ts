@@ -75,16 +75,14 @@ export function replaceUrlInEditor(editor: Editor, line: number, url: string, pr
       let named = link[1] ? replacement.replace(/\[[^\]]*\]\(/, () => `[${link[1].replace(/[[\]]/g, "")}](`) : replacement;
       const linkEnd = idx + url.length + 1;
       const existing = metaSpan(text, linkEnd);
+      const between = existing ? text.slice(linkEnd, existing.start) : "";
       if (existing && !storeMetadata) {
         // An explicit reconversion may replace a stale href, but must leave
         // existing comments as written and attached to the primary geo link.
         const end = stopLinks(named)[0]?.to ?? named.length;
-        named = named.slice(0, end) + text.slice(linkEnd, existing.end) + named.slice(end);
-        editor.replaceRange(named, { line: ln, ch: idx - link[0].length }, { line: ln, ch: existing.end });
-        return true;
+        named = named.slice(0, end) + " " + text.slice(existing.start, existing.end) + named.slice(end);
       }
       // Re-resolving an edited href replaces the stale coordinates and facts.
-      const between = existing ? text.slice(linkEnd, existing.start) : "";
       editor.replaceRange(named + between, { line: ln, ch: idx - link[0].length }, { line: ln, ch: existing?.end ?? linkEnd });
       return true;
     }

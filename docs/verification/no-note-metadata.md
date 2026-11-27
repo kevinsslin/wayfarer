@@ -48,6 +48,9 @@ Google responses are mocked. No real key or private vault was used.
   existing comments, transport edits, late responses after rename/delete/source
   or file changes, queued Reading-view writes when storage is switched off,
   and a fresh plugin instance with the same settings and durable plan.
+- Follow-up review: reconversion with user prose before an old comment keeps
+  that prose outside the geo/source pair, preserves the comment verbatim and
+  remains a single stop through repeated bulk conversion.
 - Existing default-mode tests, Reading view, Live Preview decoration tests,
   stale-write and mobile-host stubs remain green. `git diff --check` passes.
 
