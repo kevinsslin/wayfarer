@@ -17,6 +17,10 @@ export interface WayfarerSettings {
   dayHeadingLevel: number;
   /** Convert Google Maps links automatically on paste. */
   convertOnPaste: boolean;
+  /** Import a geo link plus the original Google Maps link. */
+  googleToGeo: boolean;
+  /** Plain-text or emoji label of the adjacent Google source in new geo imports. */
+  googleLinkLabel: string;
   /** Prefix converted stops with a category emoji (⛩️ 🍜 🏨 ...). */
   addEmoji: boolean;
   /** The map flies to the stop on the cursor line. */
@@ -38,6 +42,8 @@ export const DEFAULT_SETTINGS: WayfarerSettings = {
   listOpen: true,
   dayHeadingLevel: 2,
   convertOnPaste: true,
+  googleToGeo: false,
+  googleLinkLabel: "🗺️",
   addEmoji: true,
   followCursor: true,
   tileUrl: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -54,6 +60,7 @@ const GOOGLE_LANGUAGE_DESC = "By default, follow your interface language (Obsidi
 
 const KEY_DESC = "Your own key. It unlocks exact pins with ratings, opening hours and photos, and routes between stops (walking, cycling, driving and transit with line names). Without it the plugin still reads pins from pasted links, and legs show their distance only. Stored in this vault's plugin data, never in a note. ";
 const AGENT_DESC = "Teaches an AI coding agent to research a trip and write the note in the format this plugin reads, planning notes included. ";
+const GOOGLE_LABEL_DESC = "Text or emoji for the Google Maps link beside a geo link. Default 🗺️. Applies to new conversions.";
 
 function keyDesc(): DocumentFragment {
   return createFragment((f) => {
@@ -86,6 +93,8 @@ export class WayfarerSettingTab extends PluginSettingTab {
     return [
       { name: "Language", control: { type: "dropdown", key: "uiLanguage", options: { auto: "Follow Obsidian", en: "English", "zh-TW": "繁體中文" } } },
       { name: "Convert map links when pasted", desc: "A pasted link (including maps.app.goo.gl) becomes a place with a pin.", control: { type: "toggle", key: "convertOnPaste" } },
+      { name: "Convert Google links to geo links", desc: "Save coordinates in a geo link and keep the original link beside it. Applies to new conversions.", control: { type: "toggle", key: "googleToGeo" } },
+      { name: "Google Maps link label", desc: GOOGLE_LABEL_DESC, control: { type: "text", key: "googleLinkLabel" } },
       { name: "Add an emoji to converted places", desc: "⛩️ 🍜 🏨 🚉 based on what the place is. An emoji you typed before the link is kept.", control: { type: "toggle", key: "addEmoji" } },
       { name: "Map follows the line you edit", control: { type: "toggle", key: "followCursor" } },
       { name: "Open the map when a note has places", control: { type: "toggle", key: "autoOpen" } },
@@ -211,6 +220,16 @@ export class WayfarerSettingTab extends PluginSettingTab {
       .setName("Convert map links when pasted")
       .setDesc("A pasted link (including maps.app.goo.gl) becomes a place with a pin.")
       .addToggle((t) => t.setValue(s.convertOnPaste).onChange((v) => { s.convertOnPaste = v; save(); }));
+
+    new Setting(containerEl)
+      .setName("Convert Google links to geo links")
+      .setDesc("Save coordinates in a geo link and keep the original link beside it. Applies to new conversions.")
+      .addToggle((t) => t.setValue(s.googleToGeo).onChange((v) => { s.googleToGeo = v; save(); }));
+
+    new Setting(containerEl)
+      .setName("Google Maps link label")
+      .setDesc(GOOGLE_LABEL_DESC)
+      .addText((t) => t.setPlaceholder("🗺️").setValue(s.googleLinkLabel).onChange((v) => { s.googleLinkLabel = v; save(); }));
 
     new Setting(containerEl)
       .setName("Add an emoji to converted places")

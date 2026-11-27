@@ -22,7 +22,8 @@ function urlSpans(visible: string | null): { url: string; from: number; to: numb
   while ((m = re.exec(text))) {
     const url = m[0].replace(/[),.;!?]+$/, "");
     const index = m.index;
-    if (converted.some((link) => link.url && index >= link.from && index < link.to)) continue;
+    if (converted.some((link) => (link.url && index >= link.from && index < link.to)
+      || (link.googleFrom !== undefined && index >= link.googleFrom && index < link.googleTo!))) continue;
     out.push({ url, from: index, to: index + url.length });
   }
   return out;
@@ -39,10 +40,17 @@ export function findMapsUrl(visible: string | null, skip?: Set<string>): { url: 
 }
 
 /** The line should be replaced in place; returns the new text for the span. */
-export function stopText(place: ResolvedPlace, withEmoji = true): string {
+export function stopText(place: ResolvedPlace, withEmoji = true, googleToGeo = false, googleLinkLabel = "🗺️"): string {
   const cat = pickCategory({ googleType: place.meta?.type, name: place.name });
   const emoji = withEmoji && cat !== "place" ? CATEGORY_EMOJI[cat] : undefined;
-  return formatStop(place.name, place.lat, place.lng, place.meta, emoji, place.url);
+  if (!googleToGeo || !place.url) return formatStop(place.name, place.lat, place.lng, place.meta, emoji, place.url);
+  // The geo link owns its facts; coordinates and the source already live in ordinary links.
+  const { lat: _lat, lng: _lng, locationUrl: _url, ...meta } = place.meta ?? {};
+  const stop = formatStop(place.name, place.lat, place.lng, meta, emoji);
+  const url = place.url.replace(/\(/g, "%28").replace(/\)/g, "%29");
+  // Keep a label from introducing a new link, line, code span or hidden comment.
+  const label = googleLinkLabel.replace(/[\r\n\t]+/g, " ").replace(/[[\]\\`%<>]/g, "").trim() || "🗺️";
+  return `${stop} [${label}](${url})`;
 }
 
 /**

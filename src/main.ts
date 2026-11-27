@@ -348,8 +348,8 @@ export default class WayfarerPlugin extends Plugin {
     const stops = itinerary.stops;
     // When lines moved, the same place elsewhere is taken only if it is the one such stop; with two
     // (the same leg on two days) there is no telling which the result was for, so it is dropped.
-    const same = stops.filter((s) => s.lat === stop.lat && s.lng === stop.lng && s.name === stop.name);
-    const live = stops.find((s) => s.line === stop.line && s.from === stop.from && s.lat === stop.lat && s.lng === stop.lng && s.name === stop.name)
+    const same = stops.filter((s) => s.lat === stop.lat && s.lng === stop.lng && s.name === stop.name && s.url === stop.url && s.googleUrl === stop.googleUrl);
+    const live = same.find((s) => s.line === stop.line && s.from === stop.from)
       ?? (same.length === 1 ? same[0] : undefined)
       ?? (quiet ? null : stop);
     if (!live) return;
@@ -519,7 +519,7 @@ export default class WayfarerPlugin extends Plugin {
       const place = await resolveMapsUrl(url, this.resolveDeps());
       if (!valid()) return false;
       const hasEmoji = firstEmoji(prefix) !== null;
-      if (replaceUrlInEditor(editor, line, url, prefix, stopText(place, this.settings.addEmoji && !hasEmoji))) return true;
+      if (replaceUrlInEditor(editor, line, url, prefix, stopText(place, this.settings.addEmoji && !hasEmoji, this.settings.googleToGeo, this.settings.googleLinkLabel))) return true;
       new Notice(`Wayfarer: the link moved before it resolved. ${place.name} is at ${place.lat}, ${place.lng}.`);
     } catch (e) {
       if (!valid()) return false;

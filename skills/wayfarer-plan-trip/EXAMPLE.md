@@ -36,7 +36,7 @@ Booked: Revaty Kegon 47, Asakusa 13:00 to Tobu-Nikko 14:50 on 9/16, two reserved
 
 - 14:50 🚆 [Tobu-Nikko Station](geo:36.7476,139.6189) Revaty Kegon from Asakusa, seat reserved
 - 🚶 [Shinkyo Bridge](geo:36.7546,139.6033) the red bridge at the entrance to the shrines
-- ⛩️ [Nikko Toshogu](geo:36.7580,139.5990) last entry 16:30
+- ⛩️ [Nikko Toshogu](geo:36.7580,139.5990) [🗺️](https://www.google.com/maps/place/Nikko+Toshogu/data=!3d36.7580!4d139.5990) last entry 16:30
     Sleeping Cat and the Three Wise Monkeys carvings
     Bring 1,600 yen cash for the ticket
 - 🚶 🏨 [Nikko Station Hotel Classic](geo:36.7469,139.6215) check in, dinner nearby
