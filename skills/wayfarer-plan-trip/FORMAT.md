@@ -59,3 +59,10 @@ Not planned day by day yet. Staying in the city over the long weekend.
 | `![[img.jpg]]` or image URL on the line or the next | Photo in the card. |
 | `%%wf:{…}%%` after a link | Plugin metadata: Google details (rating, hours, address, photo, UTC offset) and the last routed leg. Includes coordinates for imported Google Maps links. Written by the plugin, never by hand. Leave it as is. |
 | Full Google Maps URL | Converted to a stop when pasted or via the convert command; the original URL stays clickable. Short `maps.app.goo.gl` links can be expanded on desktop and mobile; use the full place URL when expansion is unavailable. |
+
+**Store metadata in notes** defaults to on. When off, new imports use geo/source pairs;
+Google details and routes are kept only for the plugin session. The note remains the
+source for coordinates, names, times, transport and prose. Existing `%%wf` comments
+are still read and are not rewritten or removed automatically. Session-only facts
+appear on the map, not as new inline metadata chips. Restarting loses those facts;
+request details again when online. Do not add substitute YAML or cache files.

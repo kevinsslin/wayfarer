@@ -1,5 +1,5 @@
 import { googlePlaces, googleRoute } from "./net";
-import { Notice, PluginSettingTab, Setting, type App, type TextComponent, type SettingDefinitionItem } from "obsidian";
+import { Notice, PluginSettingTab, Setting, type App, type TextComponent, type ToggleComponent, type SettingDefinitionItem } from "obsidian";
 import type WayfarerPlugin from "./main";
 
 export interface WayfarerSettings {
@@ -21,6 +21,8 @@ export interface WayfarerSettings {
   googleToGeo: boolean;
   /** Plain-text or emoji label of the adjacent Google source in new geo imports. */
   googleLinkLabel: string;
+  /** Persist fetched facts and routes in %%wf comments; false requires geo imports. */
+  storeMetadata: boolean;
   /** Prefix converted stops with a category emoji (⛩️ 🍜 🏨 ...). */
   addEmoji: boolean;
   /** The map flies to the stop on the cursor line. */
@@ -44,6 +46,7 @@ export const DEFAULT_SETTINGS: WayfarerSettings = {
   convertOnPaste: true,
   googleToGeo: false,
   googleLinkLabel: "🗺️",
+  storeMetadata: true,
   addEmoji: true,
   followCursor: true,
   tileUrl: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -51,6 +54,14 @@ export const DEFAULT_SETTINGS: WayfarerSettings = {
   drawRoutes: true,
   autoOpen: true,
 };
+
+/** Coordinates must survive a new session even when comments are disabled. */
+export function normalizeSettings(settings: WayfarerSettings): void {
+  if (!settings.storeMetadata) settings.googleToGeo = true;
+}
+
+const GEO_DESC = "Save coordinates in a geo link and keep the original link beside it. Required while metadata storage is off. Applies to new conversions.";
+const METADATA_DESC = "Save Google details and routes in the note (default on). Turning this off enables geo conversion and keeps new details only for this session. Existing comments are left as written.";
 
 const GOOGLE_LANGUAGES: Record<string, string> = {
   auto: "Follow interface language", en: "English", "zh-TW": "繁體中文", "zh-CN": "简体中文",
@@ -93,7 +104,8 @@ export class WayfarerSettingTab extends PluginSettingTab {
     return [
       { name: "Language", control: { type: "dropdown", key: "uiLanguage", options: { auto: "Follow Obsidian", en: "English", "zh-TW": "繁體中文" } } },
       { name: "Convert map links when pasted", desc: "A pasted link (including maps.app.goo.gl) becomes a place with a pin.", control: { type: "toggle", key: "convertOnPaste" } },
-      { name: "Convert Google links to geo links", desc: "Save coordinates in a geo link and keep the original link beside it. Applies to new conversions.", control: { type: "toggle", key: "googleToGeo" } },
+      { name: "Convert Google links to geo links", desc: GEO_DESC, render: (setting) => this.renderGeoConversion(setting) },
+      { name: "Store metadata in notes", desc: METADATA_DESC, control: { type: "toggle", key: "storeMetadata" } },
       { name: "Google Maps link label", desc: GOOGLE_LABEL_DESC, control: { type: "text", key: "googleLinkLabel" } },
       { name: "Add an emoji to converted places", desc: "⛩️ 🍜 🏨 🚉 based on what the place is. An emoji you typed before the link is kept.", control: { type: "toggle", key: "addEmoji" } },
       { name: "Map follows the line you edit", control: { type: "toggle", key: "followCursor" } },
@@ -135,9 +147,20 @@ export class WayfarerSettingTab extends PluginSettingTab {
     else if (key === "tileUrl") s[key] = String(value).trim() || DEFAULT_SETTINGS.tileUrl;
     else if (key === "languageCode") s[key] = String(value).trim() || "auto";
     else s[key] = value;
+    normalizeSettings(this.plugin.settings);
+    this.geoToggle?.setValue(this.plugin.settings.googleToGeo).setDisabled(!this.plugin.settings.storeMetadata);
     await this.plugin.saveSettings();
     if (key === "uiLanguage") this.plugin.applyLocale();
     this.plugin.refresh();
+  }
+
+  private geoToggle?: ToggleComponent;
+  private renderGeoConversion(setting: Setting): void {
+    const s = this.plugin.settings;
+    setting.setDesc(GEO_DESC).addToggle((t) => {
+      this.geoToggle = t;
+      t.setValue(s.googleToGeo).setDisabled(!s.storeMetadata).onChange((v) => { void this.setControlValue("googleToGeo", v); });
+    });
   }
 
   private renderGoogleLanguage(setting: Setting): void {
@@ -221,10 +244,11 @@ export class WayfarerSettingTab extends PluginSettingTab {
       .setDesc("A pasted link (including maps.app.goo.gl) becomes a place with a pin.")
       .addToggle((t) => t.setValue(s.convertOnPaste).onChange((v) => { s.convertOnPaste = v; save(); }));
 
+    this.renderGeoConversion(new Setting(containerEl).setName("Convert Google links to geo links"));
     new Setting(containerEl)
-      .setName("Convert Google links to geo links")
-      .setDesc("Save coordinates in a geo link and keep the original link beside it. Applies to new conversions.")
-      .addToggle((t) => t.setValue(s.googleToGeo).onChange((v) => { s.googleToGeo = v; save(); }));
+      .setName("Store metadata in notes")
+      .setDesc(METADATA_DESC)
+      .addToggle((t) => t.setValue(s.storeMetadata).onChange((v) => { void this.setControlValue("storeMetadata", v); }));
 
     new Setting(containerEl)
       .setName("Google Maps link label")

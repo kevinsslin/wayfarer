@@ -4,7 +4,7 @@ import { dayAtLine, moveBlockAt, parseItinerary, patchLineMeta, setTransportOnLi
 import type { Transport } from "./core/category";
 import { ResolveError, distanceM, resolveMapsUrl, type ResolveDeps } from "./core/resolve";
 import { GoogleApiError, expandShortUrl, googlePlaces } from "./net";
-import { DEFAULT_SETTINGS, WayfarerSettingTab, type WayfarerSettings } from "./settings";
+import { DEFAULT_SETTINGS, normalizeSettings, WayfarerSettingTab, type WayfarerSettings } from "./settings";
 import { findMapsUrl, metaDecorations, replaceUrlInEditor, stopText, visibleLine } from "./ui/editor";
 import { WayfarerView, VIEW_TYPE_WAYFARER } from "./ui/map-view";
 import { readingPostProcessor } from "./ui/reading";
@@ -17,6 +17,8 @@ import { PhotoCache, photoFor, type StopPhoto } from "./photos";
 import { getLocale, localeFor, setLocale, t } from "./core/i18n";
 import { bareLeg } from "./core/legs";
 import { googleLanguageFor } from "./core/google-language";
+import { PlaceDetailsCache, placeFacts } from "./place-details";
+import { pickCategory } from "./core/category";
 
 /**
  * Wayfarer: the note is the plan, the pane is the map.
@@ -57,6 +59,21 @@ export default class WayfarerPlugin extends Plugin {
     });
   }
   private current: { file: TFile; itinerary: Itinerary } | null = null;
+  readonly details = new PlaceDetailsCache(() => ({ googleApiKey: this.settings.googleApiKey, languageCode: this.googleLanguageCode }));
+
+  /** Overlay session facts on a fresh parse; the Markdown remains the durable plan. */
+  private parseNote(text: string): Itinerary {
+    const itinerary = parseItinerary(text, { maxHeadingLevel: this.settings.dayHeadingLevel });
+    if (!this.settings.storeMetadata) {
+      for (const stop of itinerary.stops) {
+        const facts = this.details.get(stop);
+        if (!facts) continue;
+        stop.meta = { ...stop.meta, ...facts };
+        stop.category = pickCategory({ googleType: stop.meta.type, name: stop.name });
+      }
+    }
+    return itinerary;
+  }
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -139,6 +156,7 @@ export default class WayfarerPlugin extends Plugin {
     if (this.autoOpenTimer !== null) window.clearTimeout(this.autoOpenTimer);
     this.router.dispose();
     this.photos.clear();
+    this.details.dispose();
   }
 
   /* ---------- settings ---------- */
@@ -160,10 +178,12 @@ export default class WayfarerPlugin extends Plugin {
     // Settings that no longer exist (photo cache, routing toggles) are dropped on the next save.
     const known = Object.fromEntries(Object.entries(data).filter(([k]) => k in DEFAULT_SETTINGS));
     this.settings = { ...DEFAULT_SETTINGS, ...known };
+    normalizeSettings(this.settings);
   }
   /** Bumped on every save, so a pane whose note did not change still redraws for a changed setting. */
   settingsRev = 0;
   async saveSettings(): Promise<void> {
+    normalizeSettings(this.settings);
     this.settingsRev++;
     await this.saveData(this.settings);
   }
@@ -211,14 +231,14 @@ export default class WayfarerPlugin extends Plugin {
           .then(() => this.app.vault.cachedRead(file))
           .then((text) => {
             if (this.unloaded || this.current?.file !== file || this.activeMarkdown()) return;
-            this.current = { file, itinerary: parseItinerary(text, { maxHeadingLevel: this.settings.dayHeadingLevel }) };
+            this.current = { file, itinerary: this.parseNote(text) };
             this.pushToViews();
           })
           .catch(() => {});
       }
       return;
     }
-    const itinerary = parseItinerary(md.editor.getValue(), { maxHeadingLevel: this.settings.dayHeadingLevel });
+    const itinerary = this.parseNote(md.editor.getValue());
     this.current = { file: md.file, itinerary };
     this.pushToViews();
     if (this.settings.autoOpen && itinerary.stops.length > 0 && this.mapViews.length === 0 && !Platform.isMobile) this.autoOpenSoon();
@@ -250,7 +270,7 @@ export default class WayfarerPlugin extends Plugin {
     // The debounce can deliver an edit from a note the user has already left.
     const md = this.activeMarkdown();
     if (md?.file && md.file.path !== info.file.path) return;
-    this.current = { file: info.file, itinerary: parseItinerary(editor.getValue(), { maxHeadingLevel: this.settings.dayHeadingLevel }) };
+    this.current = { file: info.file, itinerary: this.parseNote(editor.getValue()) };
     this.pushToViews();
   }
 
@@ -341,6 +361,7 @@ export default class WayfarerPlugin extends Plugin {
    * still is.
    */
   setStopMeta(stop: Stop, patch: Partial<PlaceMeta>, quiet = false): void {
+    if (!this.settings.storeMetadata) return; // Routed results remain available in LegRouter's session cache.
     const md = this.activeMarkdown();
     if (!md?.file || !this.current || md.file.path !== this.current.file.path) return;
     // The same place can appear twice (the hotel at the end of every day), so the line it was parsed from is tried first.
@@ -359,7 +380,7 @@ export default class WayfarerPlugin extends Plugin {
       if (!from || !bareLeg(from, { ...live, meta: { ...live.meta, leg: patch.leg } }, transitContext(dateForDay(day), from, live)).routed) return;
     }
     const expectedText = md.editor.getValue();
-    void this.rewriteLine(md, live.line, (text) => (md.editor.getValue() === expectedText && stopStillAt(text, live) ? patchLineMeta(text, patch, live) : text));
+    void this.rewriteLine(md, live.line, (text) => (this.settings.storeMetadata && md.editor.getValue() === expectedText && stopStillAt(text, live) ? patchLineMeta(text, patch, live) : text));
   }
 
   /**
@@ -402,7 +423,7 @@ export default class WayfarerPlugin extends Plugin {
     // A menu opened on another note's map must not write into this one.
     if (!md || (path !== undefined && md.file?.path !== path)) return;
     // The link must still be where the pane saw it; otherwise the note changed under us.
-    void this.rewriteLine(md, stop.line, (text) => (stopStillAt(text, stop) ? setTransportOnLine(text, stop, mode) : text));
+    void this.rewriteLine(md, stop.line, (text) => (stopStillAt(text, stop) ? setTransportOnLine(text, stop, mode, this.settings.storeMetadata) : text));
   }
 
   /**
@@ -417,28 +438,48 @@ export default class WayfarerPlugin extends Plugin {
     if (!md?.file || !cur || md.file.path !== cur.file.path) { new Notice(t("empty")); return; }
     if (!this.settings.googleApiKey) { new Notice(`Wayfarer: ${t("key_needed")}`); return; }
     const file = md.file;
-    const valid = () => !this.unloaded && md.file === file;
-    const places = googlePlaces(this.settings.googleApiKey, this.googleLanguageCode);
-    const todo = cur.itinerary.stops.filter((s) => !s.meta?.placeId);
+    const apiKey = this.settings.googleApiKey;
+    const language = this.googleLanguageCode;
+    const valid = () => !this.unloaded && md.file === file && this.settings.googleApiKey === apiKey && this.googleLanguageCode === language;
+    const places = googlePlaces(apiKey, language);
+    const todo = cur.itinerary.stops.filter((s) => !this.settings.storeMetadata || !s.meta?.placeId);
     if (todo.length === 0) { new Notice("Wayfarer: every stop already has its details"); return; }
     let done = 0;
     let missed = 0;
+    const refreshed = new Set<string>();
     for (const stop of todo) {
       if (!valid()) return;
       try {
+        if (!this.settings.storeMetadata) {
+          const key = this.details.key(stop);
+          if (refreshed.has(key)) continue;
+          refreshed.add(key);
+          const facts = await this.details.fetch(stop, true);
+          if (!valid()) return;
+          if (facts) { done++; this.refresh(); }
+          else missed++;
+          continue;
+        }
         const p = await places.searchText(stop.name, stop);
         if (!valid()) return;
         if (!p?.meta || distanceM(p, stop) > 300) { missed++; continue; }
-        const { rating, hours, address, website, placeId, type, photo, utc } = p.meta;
+        const facts = placeFacts(p.meta);
+        // The option may have changed while this request was in flight.
+        if (!this.settings.storeMetadata) {
+          this.details.remember(stop, facts);
+          done++;
+          this.refresh();
+          continue;
+        }
         // Only when the same link is still on that line; the note may have changed while Google answered.
-        if (await this.rewriteLine(md, stop.line, (text) => (stopStillAt(text, stop) ? patchLineMeta(text, { rating, hours, address, website, placeId, type, photo, utc }, stop) : text), file)) done++;
+        if (await this.rewriteLine(md, stop.line, (text) => (this.settings.storeMetadata && stopStillAt(text, stop) ? patchLineMeta(text, facts, stop) : text), file)) done++;
       } catch (e) {
         if (!valid()) return;
         if (e instanceof GoogleApiError) { this.googleRefused(e); return; }
         missed++;
       }
     }
-    new Notice(`Wayfarer: details saved for ${done} stop${done === 1 ? "" : "s"}${missed ? `, ${missed} not found at the pin` : ""}`, 8000);
+    new Notice(`Wayfarer: details fetched for ${done} stop${done === 1 ? "" : "s"}${missed ? `, ${missed} not found at the pin` : ""}`, 8000);
   }
 
   /**
@@ -519,7 +560,18 @@ export default class WayfarerPlugin extends Plugin {
       const place = await resolveMapsUrl(url, this.resolveDeps());
       if (!valid()) return false;
       const hasEmoji = firstEmoji(prefix) !== null;
-      if (replaceUrlInEditor(editor, line, url, prefix, stopText(place, this.settings.addEmoji && !hasEmoji, this.settings.googleToGeo, this.settings.googleLinkLabel))) return true;
+      const persist = this.settings.storeMetadata;
+      const formatted = stopText(place, this.settings.addEmoji && !hasEmoji, this.settings.googleToGeo || !persist, this.settings.googleLinkLabel, persist);
+      if (replaceUrlInEditor(editor, line, url, prefix, formatted, persist)) {
+        if (!persist && place.meta) {
+          const source = place.url?.replace(/\(/g, "%28").replace(/\)/g, "%29");
+          for (const stop of parseItinerary(editor.getValue(), { maxHeadingLevel: this.settings.dayHeadingLevel }).stops) {
+            if (stop.googleUrl === source && distanceM(stop, place) < 1) this.details.remember(stop, place.meta);
+          }
+          this.refresh();
+        }
+        return true;
+      }
       new Notice(`Wayfarer: the link moved before it resolved. ${place.name} is at ${place.lat}, ${place.lng}.`);
     } catch (e) {
       if (!valid()) return false;

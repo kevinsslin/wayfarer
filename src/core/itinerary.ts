@@ -522,7 +522,7 @@ const TRANSPORT_TOKEN = /\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictogra
  * one is inserted right before the link. A legacy `via` in the metadata is
  * dropped so the text is the only place the choice lives. Nothing else moves.
  */
-export function setTransportOnLine(line: string, stop: Pick<Stop, "from" | "to" | "beforeFrom">, mode: Transport): string {
+export function setTransportOnLine(line: string, stop: Pick<Stop, "from" | "to" | "beforeFrom">, mode: Transport, storeMetadata = true): string {
   const emoji = TRANSPORT_EMOJI[mode];
   // An emoji inside a comment or inline code is the user's text, not the stop's transport.
   const before = maskMeta(stripComments(line, false).bare.slice(stop.beforeFrom, stop.from));
@@ -534,6 +534,7 @@ export function setTransportOnLine(line: string, stop: Pick<Stop, "from" | "to" 
     break;
   }
   if (out === null) out = line.slice(0, stop.from) + emoji + " " + line.slice(stop.from);
+  if (!storeMetadata) return out; // An explicit transport edit changes prose only; saved comments stay byte for byte.
   // The edit sits before the link, so the link end moves by the size difference.
   const at = { to: stop.to + (out.length - line.length) };
   // A route saved for another mode is stale now; drop it rather than leave it behind.
