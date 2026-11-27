@@ -1,5 +1,14 @@
 # Note format read by Wayfarer
 
+The following is the default flat format. An optional parent route is available
+only when **Trip overview heading level** is enabled. For example, use `##`
+stages with their own pins and `###` daily plans, with the day setting at `###`.
+Parent pins belong only to the overview, and are not automatically repeated in
+days. Existing date, range, stop, time and transport formats apply at both
+levels. Overview connections cross stages without assuming a departure date;
+normal daily connections remain within each day. See the complete example and
+scope rules in [Trip overview](../../docs/trip-overview.md).
+
 ```markdown
 # Japan, autumn 2026
 

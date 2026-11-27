@@ -17,6 +17,37 @@ beforeEach(() => { vi.mocked(googleRoute).mockReset(); });
 describe("LegRouter", () => {
   const settings = () => ({ googleApiKey: "test-key", languageCode: "en" }) as WayfarerSettings;
 
+  it("reuses routing for overview bridges without comparing clocks from different days", async () => {
+    vi.mocked(googleRoute).mockResolvedValue({ ...route, durationS: 7200 });
+    const plan = parseItinerary("## 2027-01-01\n- 08:00 [A](geo:35,139)\n## 2027-01-05\n- 08:30 🚗 [B](geo:35.1,139.1)", { maxHeadingLevel: 3, overviewHeadingLevel: 2 }).overview!;
+    const routed = vi.fn<(to: Stop, leg: LegMeta, file: string) => void>();
+    const update = vi.fn();
+    const router = new LegRouter(settings, update, routed);
+    const from = plan.stops[0], to = plan.stops[1];
+    expect(router.overviewLeg(from, plan.days[1], "trip.md")?.routed).toBe(false);
+    await vi.waitFor(() => expect(update).toHaveBeenCalledOnce());
+    const leg = router.overviewLeg(from, plan.days[1], "trip.md")!;
+    expect(leg).toMatchObject({ routed: true, durationS: 7200, lateBy: 0 });
+    expect(leg.from).toBe(from);
+    expect(leg.to).toBe(to);
+    expect(from.time).toBe("08:00");
+    expect(to.time).toBe("08:30");
+    expect(googleRoute).toHaveBeenCalledOnce();
+    expect(vi.mocked(googleRoute).mock.calls[0][5]).toBeUndefined();
+    expect(routed.mock.calls[0][0]).toMatchObject({ overview: true, line: to.line, from: to.from });
+    expect(routed.mock.calls[0][2]).toBe("trip.md");
+    router.dispose();
+  });
+
+  it("does not invent or reuse an unrelated transit timetable across stages", () => {
+    const plan = parseItinerary("## 2027-01-01\n- 08:00 [A](geo:35,139)\n## 2027-01-05\n- 08:30 🚆 [B](geo:35.1,139.1)", { maxHeadingLevel: 3, overviewHeadingLevel: 2 }).overview!;
+    plan.stops[1].meta = { leg: { from: "35.0000,139.0000", to: "35.1000,139.1000", via: "train", s: 7200, m: 20000, departure: "undated:untimed" } };
+    const router = new LegRouter(settings, vi.fn());
+    expect(router.overviewLeg(plan.stops[0], plan.days[1], "trip.md")).toMatchObject({ mode: "train", routed: false, lateBy: 0 });
+    expect(googleRoute).not.toHaveBeenCalled();
+    router.dispose();
+  });
+
   it("separates departures and reuses only an identical query", async () => {
     vi.mocked(googleRoute).mockResolvedValue(route);
     const update = vi.fn();

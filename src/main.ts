@@ -211,17 +211,17 @@ export default class WayfarerPlugin extends Plugin {
           .then(() => this.app.vault.cachedRead(file))
           .then((text) => {
             if (this.unloaded || this.current?.file !== file || this.activeMarkdown()) return;
-            this.current = { file, itinerary: parseItinerary(text, { maxHeadingLevel: this.settings.dayHeadingLevel }) };
+            this.current = { file, itinerary: parseItinerary(text, { maxHeadingLevel: this.settings.dayHeadingLevel, overviewHeadingLevel: this.settings.overviewHeadingLevel }) };
             this.pushToViews();
           })
           .catch(() => {});
       }
       return;
     }
-    const itinerary = parseItinerary(md.editor.getValue(), { maxHeadingLevel: this.settings.dayHeadingLevel });
+    const itinerary = parseItinerary(md.editor.getValue(), { maxHeadingLevel: this.settings.dayHeadingLevel, overviewHeadingLevel: this.settings.overviewHeadingLevel });
     this.current = { file: md.file, itinerary };
     this.pushToViews();
-    if (this.settings.autoOpen && itinerary.stops.length > 0 && this.mapViews.length === 0 && !Platform.isMobile) this.autoOpenSoon();
+    if (this.settings.autoOpen && (itinerary.stops.length > 0 || itinerary.overview?.stops.length) && this.mapViews.length === 0 && !Platform.isMobile) this.autoOpenSoon();
   }
 
   /**
@@ -241,8 +241,9 @@ export default class WayfarerPlugin extends Plugin {
   private pushToViews(): void {
     if (!this.current) return;
     const md = this.activeMarkdown();
-    const day = md?.file?.path === this.current.file.path ? dayAtLine(this.current.itinerary, md.editor.getCursor().line) : -1;
-    for (const v of this.mapViews) v.render(this.current.file, this.current.itinerary, day, md?.editor.getCursor().line ?? -1);
+    const line = md?.file?.path === this.current.file.path && md.getMode() === "source" ? md.editor.getCursor().line : -1;
+    const day = line >= 0 ? dayAtLine(this.current.itinerary, line) : -1;
+    for (const v of this.mapViews) v.render(this.current.file, this.current.itinerary, day, line);
   }
 
   private onEdit(editor: Editor, info: MarkdownFileInfo): void {
@@ -250,14 +251,14 @@ export default class WayfarerPlugin extends Plugin {
     // The debounce can deliver an edit from a note the user has already left.
     const md = this.activeMarkdown();
     if (md?.file && md.file.path !== info.file.path) return;
-    this.current = { file: info.file, itinerary: parseItinerary(editor.getValue(), { maxHeadingLevel: this.settings.dayHeadingLevel }) };
+    this.current = { file: info.file, itinerary: parseItinerary(editor.getValue(), { maxHeadingLevel: this.settings.dayHeadingLevel, overviewHeadingLevel: this.settings.overviewHeadingLevel }) };
     this.pushToViews();
   }
 
   private trackCursor(): void {
     if (this.mapViews.length === 0 || !this.current) return;
     const md = this.activeMarkdown();
-    if (!md?.file || md.file.path !== this.current.file.path) return;
+    if (!md?.file || md.file.path !== this.current.file.path || md.getMode() !== "source") return;
     const line = md.editor.getCursor().line;
     const day = dayAtLine(this.current.itinerary, line);
     for (const v of this.mapViews) v.onCursor(line, day);
@@ -308,7 +309,7 @@ export default class WayfarerPlugin extends Plugin {
   private async exportKml(editor: Editor, ctx: MarkdownView | MarkdownFileInfo): Promise<void> {
     const file = ctx.file;
     if (!file) return;
-    const it = parseItinerary(editor.getValue(), { maxHeadingLevel: this.settings.dayHeadingLevel });
+    const it = parseItinerary(editor.getValue(), { maxHeadingLevel: this.settings.dayHeadingLevel, overviewHeadingLevel: this.settings.overviewHeadingLevel });
     if (it.stops.length === 0) {
       new Notice(t("empty"));
       return;
@@ -344,8 +345,10 @@ export default class WayfarerPlugin extends Plugin {
     const md = this.activeMarkdown();
     if (!md?.file || !this.current || md.file.path !== this.current.file.path) return;
     // The same place can appear twice (the hotel at the end of every day), so the line it was parsed from is tried first.
-    const itinerary = parseItinerary(md.editor.getValue(), { maxHeadingLevel: this.settings.dayHeadingLevel });
-    const stops = itinerary.stops;
+    const itinerary = parseItinerary(md.editor.getValue(), { maxHeadingLevel: this.settings.dayHeadingLevel, overviewHeadingLevel: this.settings.overviewHeadingLevel });
+    const scope = stop.overview ? itinerary.overview : itinerary;
+    if (!scope) return;
+    const stops = scope.stops;
     // When lines moved, the same place elsewhere is taken only if it is the one such stop; with two
     // (the same leg on two days) there is no telling which the result was for, so it is dropped.
     const same = stops.filter((s) => s.lat === stop.lat && s.lng === stop.lng && s.name === stop.name);
@@ -354,8 +357,8 @@ export default class WayfarerPlugin extends Plugin {
       ?? (quiet ? null : stop);
     if (!live) return;
     if (patch.leg) {
-      const day = itinerary.days[live.dayIndex];
-      const from = day?.stops[live.index - 1];
+      const day = scope.days[live.dayIndex];
+      const from = day?.stops[live.index - 1] ?? (stop.overview && live.index === 0 ? scope.days[live.dayIndex - 1]?.stops.at(-1) : undefined);
       if (!from || !bareLeg(from, { ...live, meta: { ...live.meta, leg: patch.leg } }, transitContext(dateForDay(day), from, live)).routed) return;
     }
     const expectedText = md.editor.getValue();
@@ -419,7 +422,7 @@ export default class WayfarerPlugin extends Plugin {
     const file = md.file;
     const valid = () => !this.unloaded && md.file === file;
     const places = googlePlaces(this.settings.googleApiKey, this.googleLanguageCode);
-    const todo = cur.itinerary.stops.filter((s) => !s.meta?.placeId);
+    const todo = [...cur.itinerary.stops, ...cur.itinerary.overview?.stops ?? []].filter((s) => !s.meta?.placeId);
     if (todo.length === 0) { new Notice("Wayfarer: every stop already has its details"); return; }
     let done = 0;
     let missed = 0;

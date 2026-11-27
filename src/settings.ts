@@ -15,6 +15,8 @@ export interface WayfarerSettings {
   listOpen: boolean;
   /** Headings at this level or shallower start a new day. */
   dayHeadingLevel: number;
+  /** Optional parent heading level for the trip overview; 0 keeps the existing flat plan. */
+  overviewHeadingLevel: number;
   /** Convert Google Maps links automatically on paste. */
   convertOnPaste: boolean;
   /** Prefix converted stops with a category emoji (⛩️ 🍜 🏨 ...). */
@@ -37,6 +39,7 @@ export const DEFAULT_SETTINGS: WayfarerSettings = {
   listWidth: 260,
   listOpen: true,
   dayHeadingLevel: 2,
+  overviewHeadingLevel: 0,
   convertOnPaste: true,
   addEmoji: true,
   followCursor: true,
@@ -54,6 +57,8 @@ const GOOGLE_LANGUAGE_DESC = "By default, follow your interface language (Obsidi
 
 const KEY_DESC = "Your own key. It unlocks exact pins with ratings, opening hours and photos, and routes between stops (walking, cycling, driving and transit with line names). Without it the plugin still reads pins from pasted links, and legs show their distance only. Stored in this vault's plugin data, never in a note. ";
 const AGENT_DESC = "Teaches an AI coding agent to research a trip and write the note in the format this plugin reads, planning notes included. ";
+const OVERVIEW_DESC = "Optional parent headings for the overall route. Must be shallower than days, for example ## stages and ### days. Off keeps the existing flat plan.";
+const OVERVIEW_LEVELS = { 0: "Off", 1: "#", 2: "##", 3: "###" };
 
 function keyDesc(): DocumentFragment {
   return createFragment((f) => {
@@ -107,6 +112,7 @@ export class WayfarerSettingTab extends PluginSettingTab {
         heading: "Advanced",
         items: [
           { name: "Heading level that starts a day", desc: "Default ## . If the note has none at this level, larger headings count.", control: { type: "dropdown", key: "dayHeadingLevel", options: { 1: "#", 2: "##", 3: "###", 4: "####" } } },
+          { name: "Trip overview heading level", desc: OVERVIEW_DESC, control: { type: "dropdown", key: "overviewHeadingLevel", options: OVERVIEW_LEVELS } },
           { name: "Draw lines between places", control: { type: "toggle", key: "drawRoutes" } },
           { name: "Map tiles URL", control: { type: "text", key: "tileUrl" } },
           { name: "Map tiles attribution", control: { type: "text", key: "tileAttribution" } },
@@ -122,7 +128,7 @@ export class WayfarerSettingTab extends PluginSettingTab {
 
   async setControlValue(key: string, value: unknown): Promise<void> {
     const s = this.plugin.settings as unknown as Record<string, unknown>;
-    if (key === "dayHeadingLevel") s[key] = Number(value);
+    if (key === "dayHeadingLevel" || key === "overviewHeadingLevel") s[key] = Number(value);
     else if (key === "tileUrl") s[key] = String(value).trim() || DEFAULT_SETTINGS.tileUrl;
     else if (key === "languageCode") s[key] = String(value).trim() || "auto";
     else s[key] = value;
@@ -239,6 +245,13 @@ export class WayfarerSettingTab extends PluginSettingTab {
       .addDropdown((d) => {
         for (const n of [1, 2, 3, 4]) d.addOption(String(n), "#".repeat(n));
         d.setValue(String(s.dayHeadingLevel)).onChange((v) => { s.dayHeadingLevel = Number(v); save(); this.plugin.refresh(); });
+      });
+    new Setting(containerEl)
+      .setName("Trip overview heading level")
+      .setDesc(OVERVIEW_DESC)
+      .addDropdown((d) => {
+        for (const [level, label] of Object.entries(OVERVIEW_LEVELS)) d.addOption(level, label);
+        d.setValue(String(s.overviewHeadingLevel)).onChange((v) => { s.overviewHeadingLevel = Number(v); save(); this.plugin.refresh(); });
       });
     new Setting(containerEl)
       .setName("Draw lines between places")

@@ -83,6 +83,19 @@ export class LegRouter {
     return legs;
   }
 
+  /** A bridge between stages has no known departure day or same-day clock gap. */
+  overviewLeg(from: Stop, day: Day, file = ""): Leg | undefined {
+    const to = day.stops[0];
+    if (!to) return undefined;
+    const a = { ...from, time: undefined };
+    const b = { ...to, time: undefined };
+    // A multi-day stay does not specify a transit timetable. Keep this connection a straight line.
+    const leg = to.transport && TRANSIT_MODES.has(to.transport)
+      ? bareLeg(a, b)
+      : this.legsFor({ ...day, stops: [a, b] }, null, file)[0];
+    return { ...leg, from, to, lateBy: 0 };
+  }
+
   /** requestUrl cannot abort an active request; discard its result and cancel queued work. */
   dispose(): void {
     this.disposed = true;
