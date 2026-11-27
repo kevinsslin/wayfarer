@@ -220,7 +220,7 @@ export interface StopLink {
   lng: number;
   url?: string;
   googleUrl?: string;
-  /** Span of the parenthesized Google source, including its wrapper. */
+  /** Span of the adjacent Google source, including any outer parentheses. */
   googleFrom?: number;
   googleTo?: number;
   from: number;
@@ -252,18 +252,26 @@ export function stopLinks(line: string): StopLink[] {
     const lat = geo ? Number(geo[1]) : meta?.lat;
     const lng = geo ? Number(geo[2]) : meta?.lng;
     if (lat === undefined || lng === undefined || !isValidLatLng(lat, lng)) continue;
-    // Only the canonical same-line pair counts. No label/language heuristics,
-    // free prose, intervening links or links on the next line are associated.
+    // Adjacent same-line links are a pair, regardless of the helper's label.
+    // Outer parentheses are optional, including a single leftover parenthesis.
+    // Prose, intervening links and independently imported Google stops stay separate.
     const next = links[i + 1];
     const gap = next ? line.slice(to, next.index) : "";
-    const open = geo && next && isGoogleMapsUrl(next[2]) && /^[ \t]*(?:%%wf:\{.*?\}%%[ \t]*)?\([ \t]*$/.test(gap);
-    const close = open ? /^[ \t]*\)/.exec(line.slice(next.index + next[0].length)) : null;
-    const googleFrom = close ? to + gap.lastIndexOf("(") : undefined;
-    const googleTo = close ? next.index + next[0].length + close[0].length : undefined;
+    const wrapper = /^[ \t]*(?:%%wf:\{.*?\}%%[ \t]*)?(\([ \t]*)?$/.exec(gap);
+    const nextEnd = next ? next.index + next[0].length : to;
+    const close = /^[ \t]*\)/.exec(line.slice(nextEnd));
+    const following = links[i + 2];
+    const ownMeta = parseMeta(META.exec(line.slice(nextEnd, following?.index ?? line.length).split("\n")[0])?.[1] ?? "");
+    const independent = ownMeta?.locationUrl !== undefined || ownMeta?.lat !== undefined || ownMeta?.lng !== undefined;
+    const ambiguous = !close && following && isGoogleMapsUrl(following[2]) && /^[ \t]*$/.test(line.slice(nextEnd, following.index));
+    const paired = geo && next && isGoogleMapsUrl(next[2]) && wrapper && !ambiguous
+      && (wrapper[1] || close || !independent);
+    const googleFrom = paired ? next.index - (wrapper[1]?.length ?? 0) : undefined;
+    const googleTo = paired ? nextEnd + (close?.[0].length ?? 0) : undefined;
     out.push({ name: m[1], lat, lng, url: geo ? undefined : m[2], from, to, meta,
-      googleUrl: close ? next[2] : undefined, googleFrom, googleTo,
+      googleUrl: paired ? next[2] : undefined, googleFrom, googleTo,
       metaFrom: mm ? to + mm.index : undefined, metaTo: mm ? to + mm.index + mm[0].length : undefined });
-    if (close) i++; // The source is part of this stop, even if it has stale coordinate metadata of its own.
+    if (paired) i++; // The source is part of this stop, not another place to import.
   }
   return out;
 }

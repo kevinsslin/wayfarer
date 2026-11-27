@@ -40,7 +40,7 @@ export function findMapsUrl(visible: string | null, skip?: Set<string>): { url: 
 }
 
 /** The line should be replaced in place; returns the new text for the span. */
-export function stopText(place: ResolvedPlace, withEmoji = true, googleToGeo = false): string {
+export function stopText(place: ResolvedPlace, withEmoji = true, googleToGeo = false, googleLinkLabel = "🗺️"): string {
   const cat = pickCategory({ googleType: place.meta?.type, name: place.name });
   const emoji = withEmoji && cat !== "place" ? CATEGORY_EMOJI[cat] : undefined;
   if (!googleToGeo || !place.url) return formatStop(place.name, place.lat, place.lng, place.meta, emoji, place.url);
@@ -48,7 +48,9 @@ export function stopText(place: ResolvedPlace, withEmoji = true, googleToGeo = f
   const { lat: _lat, lng: _lng, locationUrl: _url, ...meta } = place.meta ?? {};
   const stop = formatStop(place.name, place.lat, place.lng, meta, emoji);
   const url = place.url.replace(/\(/g, "%28").replace(/\)/g, "%29");
-  return `${stop} ([Google Maps](${url}))`;
+  // Keep a label from introducing a new link, line, code span or hidden comment.
+  const label = googleLinkLabel.replace(/[\r\n\t]+/g, " ").replace(/[[\]\\`%<>]/g, "").trim() || "🗺️";
+  return `${stop} [${label}](${url})`;
 }
 
 /**

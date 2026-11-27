@@ -7,7 +7,7 @@ old settings and imported Google stops retain their previous behavior.
 
 `pnpm install --frozen-lockfile` with pnpm 9.12.3 succeeded. The lockfile and
 dependencies are unchanged. `pnpm check` passed on the untouched base
-(161 tests), then on this branch (165 tests, plus extended bundle smoke):
+(161 tests), then on this branch (175 tests, plus extended bundle smoke):
 ESLint, CSS lint, TypeScript, unit tests, production build and load smoke.
 
 The geo-pair unit tests cover source identity, localized helper labels,
@@ -23,6 +23,17 @@ Network responses are mocks; no paid Google key was used.
 The planning instructions now preserve geo/source pairs when producing portable
 Markdown or revising an existing plan; the worked example includes one such
 pair. Example Markdown is parsed to check that the helper remains one stop.
+
+New imports use `[Name](geo:lat,lng) [🗺️](original URL)`. The label is configurable
+in both settings UIs and applies to new conversions only. Empty labels fall back
+to the map emoji; syntax-breaking characters are removed. Detection is based on
+adjacent same-line links, not their labels. Legacy outer parentheses, either
+single remaining parenthesis and parentheses inside a label remain readable.
+No notes are automatically reformatted. Tests cover source spans, plain remarks,
+metadata edits, stale source checks and repeat conversion for these variants.
+An independently imported Google stop with its own saved coordinates or source
+identity is not swallowed by an unwrapped pair. Prose, intervening links,
+newlines and ambiguous lists of sources still do not associate.
 
 Not executed: real desktop Obsidian, Android, Nextcloud rendering/sync and
 physical-device undo. The single editor replacement is checked in smoke,

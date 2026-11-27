@@ -519,7 +519,7 @@ export default class WayfarerPlugin extends Plugin {
       const place = await resolveMapsUrl(url, this.resolveDeps());
       if (!valid()) return false;
       const hasEmoji = firstEmoji(prefix) !== null;
-      if (replaceUrlInEditor(editor, line, url, prefix, stopText(place, this.settings.addEmoji && !hasEmoji, this.settings.googleToGeo))) return true;
+      if (replaceUrlInEditor(editor, line, url, prefix, stopText(place, this.settings.addEmoji && !hasEmoji, this.settings.googleToGeo, this.settings.googleLinkLabel))) return true;
       new Notice(`Wayfarer: the link moved before it resolved. ${place.name} is at ${place.lat}, ${place.lng}.`);
     } catch (e) {
       if (!valid()) return false;

@@ -52,10 +52,10 @@ Run **Insert day headings for a trip** to get the headings, then paste links und
 Enable **Convert Google links to geo links** (off by default) to import a coordinate link with the original Maps link beside it:
 
 ```markdown
-- [Cafe](geo:35,139) ([Google Maps](https://maps.app.goo.gl/original))
+- [Cafe](geo:35,139) [🗺️](https://maps.app.goo.gl/original)
 ```
 
-This same-line pair is one stop. The helper's label can be changed or translated; it is recognized by its Google URL and parentheses immediately after the geo link. Map cards and Reading view open the original source. Optional Google details are saved between the geo link and its helper, without duplicating coordinates. Existing pairs remain readable when this setting is off; existing notes are not converted automatically. Links with coordinates can resolve without a key; links containing only a place ID or name can still require one, and blocked short links may require the full Maps URL.
+This same-line pair is one stop. **Google Maps link label** chooses the text or emoji for new conversions (default `🗺️`, for example `Maps` or `(🗺️)`). The helper is recognized by its Google URL immediately after the geo link, independent of its label. Existing `([Google Maps](URL))` pairs remain supported, even if one or both outer parentheses are removed. Map cards and Reading view open the original source. Optional Google details are saved between the geo link and its helper, without duplicating coordinates. Existing pairs remain readable when this setting is off; changing settings does not rewrite notes. Prose, a newline or an intervening link separates independent links; an adjacent Google stop with its own saved coordinates remains independent unless explicitly wrapped as a source. Links with coordinates can resolve without a key; links containing only a place ID or name can still require one, and blocked short links may require the full Maps URL.
 
 ![Rating and hours chips after each link in Reading view](docs/screenshots/reading.jpg)
 

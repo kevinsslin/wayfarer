@@ -60,9 +60,15 @@ class ItemViewStub extends Component {
 }
 class PluginSettingTabStub { constructor(app, plugin) { this.app = app; this.plugin = plugin; this.containerEl = fakeEl(); } }
 const chain = () => new Proxy(() => chain(), { get: () => chain() });
+const settingTexts = [];
 class SettingStub {
-  setName() { return this; } setDesc() { return this; } setHeading() { return this; }
-  addToggle(cb) { cb(chain()); return this; } addDropdown(cb) { cb(chain()); return this; } addText(cb) { cb(chain()); return this; }
+  setName(name) { this.name = name; return this; } setDesc() { return this; } setHeading() { return this; }
+  addToggle(cb) { cb(chain()); return this; } addDropdown(cb) { cb(chain()); return this; }
+  addText(cb) {
+    const text = { name: this.name, inputEl: { setAttribute() {} }, setPlaceholder() { return this; }, setValue(v) { this.value = v; return this; }, onChange(fn) { this.change = fn; return this; } };
+    settingTexts.push(text); cb(text); return this;
+  }
+  addButton(cb) { cb(chain()); return this; }
 }
 
 let obsidianLanguage = "en";
@@ -111,6 +117,7 @@ globalThis.document = {
 };
 Object.defineProperty(globalThis, "navigator", { value: { userAgent: "node", platform: "node", maxTouchPoints: 0 }, configurable: true });
 globalThis.ResizeObserver = class { observe() {} disconnect() {} };
+globalThis.createFragment = (cb) => { const f = { appendText() {}, createEl() {} }; cb(f); return f; };
 // Another plugin's Leaflet (Map View with Geoman attached) already owns the global.
 const otherLeaflet = { PM: { optIn: false } };
 globalThis.L = otherLeaflet;
@@ -452,6 +459,14 @@ console.log("smoke: OK (stale drags, renamed stops, duplicate legs and link copi
 // Geo imports are ordinary links; helpers are never converted again, including
 // after the option is disabled. Exercise actual editor writes and renderers.
 assert(plugin.settings.googleToGeo === false, "geo imports default off for old settings");
+assert(plugin.settings.googleLinkLabel === "🗺️", "old settings receive the compact default label");
+assert(plugin.settingTabs[0].getSettingDefinitions().some((s) => s.control?.key === "googleLinkLabel"), "label is available in declarative settings");
+plugin.settingTabs[0].display();
+const labelInput = settingTexts.find((s) => s.name === "Google Maps link label");
+assert(labelInput?.value === "🗺️", "legacy settings render the same label default");
+labelInput.change("GMaps");
+assert(plugin.settings.googleLinkLabel === "GMaps" && plugin.savedData.googleLinkLabel === "GMaps", "legacy label control saves the preference");
+await plugin.settingTabs[0].setControlValue("googleLinkLabel", "🗺️");
 await plugin.settingTabs[0].setControlValue("googleToGeo", true);
 for (const apiKey of ["", "smoke-key"]) {
   plugin.settings.googleApiKey = apiKey;
@@ -469,17 +484,17 @@ for (const apiKey of ["", "smoke-key"]) {
   plugin.refresh();
   const stop = plugin.current.itinerary.stops[0];
   assert(plugin.current.itinerary.stops.length === 1 && stop.googleUrl === url && !stop.url, "geo pair has one stop with a distinct Google source");
-  assert(source.includes(`[My $& hotel](geo:35,139)`) && source.includes(`([Google Maps](${url}))`), "geo conversion preserves name and exact source URL");
+  assert(source.includes(`[My $& hotel](geo:35,139)`) && source.includes(`[🗺️](${url})`), "geo conversion preserves name and exact source URL");
   assert(source.startsWith("## 2027-01-01\n- 09:00 🚲 🏨 ") && source.endsWith("book ahead\n    Bring cash"), "geo conversion keeps time, transport, category and prose");
   assert(!source.includes('"lat"') && !source.includes('"locationUrl"'), "geo coordinates are not duplicated in metadata");
-  if (apiKey) assert(stop.meta?.rating === 4.5 && source.indexOf("%%wf:") < source.indexOf("([Google Maps]"), "optional facts belong to the geo link before the source");
+  if (apiKey) assert(stop.meta?.rating === 4.5 && source.indexOf("%%wf:") < source.indexOf("[🗺️]"), "optional facts belong to the geo link before the source");
   const converted = source, count = requests;
   await plugin.convertAll(md.editor);
   plugin.settings.googleToGeo = false;
   await plugin.convertAll(md.editor);
   assert(source === converted && requests === count, "repeated conversion skips helpers even with import option off");
   assert(edits.length === 1 && edits[0] === original, "conversion is one editor edit, so undo can restore the input");
-  source = converted.replace("[Google Maps]", "[Karte]");
+  source = converted.replace("[🗺️]", "[Karte]");
   await plugin.convertAll(md.editor);
   assert(requests === count && plugin.current.itinerary.stops[0].googleUrl === url, "helper detection does not depend on its label");
   const geoAnchor = {
@@ -494,7 +509,29 @@ for (const apiKey of ["", "smoke-key"]) {
   plugin.settings.googleToGeo = true;
   await plugin.convertAll(md.editor);
   plugin.refresh();
-  assert(plugin.current.itinerary.stops.length === 3 && (source.match(/\[Google Maps\]/g) ?? []).length === 1, "paired sources are skipped while adjacent unconverted links are imported");
+  assert(plugin.current.itinerary.stops.length === 3 && (source.match(/\[🗺️\]/g) ?? []).length === 1, "paired sources are skipped while adjacent unconverted links are imported");
+}
+for (const label of ["(🗺️)", "Maps", "地圖", "", "bad]\n[link`%%"]) {
+  await plugin.settingTabs[0].setControlValue("googleLinkLabel", label);
+  plugin.settings.googleApiKey = "";
+  plugin.settings.googleToGeo = true;
+  const url = "https://www.google.com/maps/place/Hotel/data=!3d35!4d139";
+  openNote("A.md", `## 2027-01-01\n- ${url}`);
+  await plugin.convertAll(md.editor);
+  plugin.refresh();
+  assert(plugin.current.itinerary.stops.length === 1 && plugin.current.itinerary.stops[0].googleUrl === url, "custom label remains one valid source pair");
+  assert(source.split("\n").length === 2, "label cannot add a line or break the link");
+  const converted = source;
+  await plugin.convertAll(md.editor);
+  assert(source === converted, "custom label source is not converted again");
+}
+await plugin.settingTabs[0].setControlValue("googleLinkLabel", "🗺️");
+for (const [left, right] of [["(", ")"], ["(", ""], ["", ")"], ["", ""]]) {
+  const url = "https://maps.app.goo.gl/legacy";
+  const legacy = `## 2027-01-01\n- [Hotel](geo:35,139) ${left}[Google Maps](${url})${right} book ahead`;
+  openNote("A.md", legacy);
+  await plugin.convertAll(md.editor);
+  assert(source === legacy && plugin.current.itinerary.stops[0].googleUrl === url, "old pair survives missing outer parentheses and repeat conversion");
 }
 plugin.settings.googleToGeo = false;
 plugin.settings.googleApiKey = "smoke-key";
