@@ -17,6 +17,8 @@ import { PhotoCache, photoFor, type StopPhoto } from "./photos";
 import { getLocale, localeFor, setLocale, t } from "./core/i18n";
 import { bareLeg } from "./core/legs";
 import { googleLanguageFor } from "./core/google-language";
+import { matchesGeoStop, type GeoLinkTarget } from "./core/geo-link-follow";
+import { registerGeoLinkClicks } from "./ui/geo-link-follow";
 
 /**
  * Wayfarer: the note is the plan, the pane is the map.
@@ -111,7 +113,11 @@ export default class WayfarerPlugin extends Plugin {
     });
 
     this.registerEvent(this.app.workspace.on("editor-paste", (evt, editor) => this.onPaste(evt, editor)));
-    this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.refresh()));
+    this.registerEvent(this.app.workspace.on("active-leaf-change", (leaf) => {
+      // Returning to a note cancels pending link navigation, including a slow vault read.
+      if (leaf?.getViewState().type !== VIEW_TYPE_WAYFARER) this.geoLinkRevision++;
+      this.refresh();
+    }));
     // A different note opened in the same pane changes no leaf, only the file.
     this.registerEvent(this.app.workspace.on("file-open", () => this.refresh()));
     const onEditorChange = debounce((editor: Editor, info: MarkdownFileInfo) => this.onEdit(editor, info), 250, true);
@@ -122,6 +128,7 @@ export default class WayfarerPlugin extends Plugin {
     const trackDocument = (doc: Document) => {
       if (documents.has(doc)) return;
       documents.add(doc);
+      registerGeoLinkClicks(this, doc);
       this.registerDomEvent(doc, "selectionchange", () => this.trackCursor());
       this.registerDomEvent(doc, "keyup", () => this.trackCursor());
       this.registerDomEvent(doc, "mouseup", () => this.trackCursor());
@@ -160,6 +167,7 @@ export default class WayfarerPlugin extends Plugin {
     // Settings that no longer exist (photo cache, routing toggles) are dropped on the next save.
     const known = Object.fromEntries(Object.entries(data).filter(([k]) => k in DEFAULT_SETTINGS));
     this.settings = { ...DEFAULT_SETTINGS, ...known };
+    this.settings.followGeoLinks = data.followGeoLinks === true;
   }
   /** Bumped on every save, so a pane whose note did not change still redraws for a changed setting. */
   settingsRev = 0;
@@ -170,7 +178,43 @@ export default class WayfarerPlugin extends Plugin {
 
   /* ---------- map pane ---------- */
 
-  async openMap(): Promise<void> {
+  private geoLinkRevision = 0;
+
+  /** Explicit source navigation also works when cursor following is unavailable on mobile. */
+  async followGeoLink(target: GeoLinkTarget): Promise<void> {
+    if (this.unloaded || !this.settings.followGeoLinks) return;
+    const revision = ++this.geoLinkRevision;
+    try {
+      const file = this.app.vault.getAbstractFileByPath(target.path);
+      if (!(file instanceof TFile)) return;
+      const editor = this.app.workspace.getLeavesOfType("markdown").map((l) => l.view)
+        .find((v): v is MarkdownView => v instanceof MarkdownView && v.file?.path === file.path && v.getMode() === "source");
+      const text = editor ? editor.editor.getValue() : await this.app.vault.cachedRead(file);
+      if (this.unloaded || !this.settings.followGeoLinks || revision !== this.geoLinkRevision) return;
+      const itinerary = parseItinerary(text, { maxHeadingLevel: this.settings.dayHeadingLevel });
+      if (!itinerary.stops.some((s) => matchesGeoStop(s, target))) {
+        new Notice("This geo link is no longer part of the mapped plan.");
+        return;
+      }
+      let view = this.mapViews.find((v) => v.sourcePath === file.path) ?? this.mapViews[0];
+      const reset = !view || view.sourcePath !== file.path;
+      if (!view) {
+        await this.openMap(() => revision === this.geoLinkRevision && !this.unloaded && this.settings.followGeoLinks);
+        view = this.mapViews[0];
+      }
+      if (!view || this.unloaded || !this.settings.followGeoLinks || revision !== this.geoLinkRevision) return;
+      this.current = { file, itinerary };
+      view.render(file, itinerary, -1);
+      // Activate a ready mobile tab synchronously; do not queue another reveal/focus.
+      if (Platform.isMobile) this.app.workspace.setActiveLeaf(view.leaf, { focus: true });
+      if (this.unloaded || !this.settings.followGeoLinks || revision !== this.geoLinkRevision || view.sourcePath !== file.path) return;
+      view.focusSourceStop(target, reset);
+    } catch {
+      if (!this.unloaded && revision === this.geoLinkRevision) new Notice("Could not open this location on the map.");
+    }
+  }
+
+  async openMap(stillWanted?: () => boolean): Promise<void> {
     const existing = this.mapLeaf();
     if (existing) {
       await this.app.workspace.revealLeaf(existing);
@@ -180,6 +224,7 @@ export default class WayfarerPlugin extends Plugin {
     const leaf = Platform.isMobile ? this.app.workspace.getLeaf("tab") : this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
     await leaf.setViewState({ type: VIEW_TYPE_WAYFARER, active: true });
+    if (stillWanted && !stillWanted()) return;
     await this.app.workspace.revealLeaf(leaf);
   }
 
@@ -258,6 +303,8 @@ export default class WayfarerPlugin extends Plugin {
     if (this.mapViews.length === 0 || !this.current) return;
     const md = this.activeMarkdown();
     if (!md?.file || md.file.path !== this.current.file.path) return;
+    // A Reading click must not be replaced by the hidden editor's old cursor.
+    if (this.settings.followGeoLinks && md.getMode() !== "source") return;
     const line = md.editor.getCursor().line;
     const day = dayAtLine(this.current.itinerary, line);
     for (const v of this.mapViews) v.onCursor(line, day);

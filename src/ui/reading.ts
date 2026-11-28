@@ -3,6 +3,10 @@ import { todayHours } from "./map-view";
 import { stopLinks, type StopLink } from "../core/itinerary";
 import { placeUrl } from "../core/gmaps-out";
 import { isGoogleMapsUrl } from "../core/gmaps-url";
+import type { GeoLinkTarget } from "../core/geo-link-follow";
+
+/** Render-only source references; they never change a note or its external href. */
+export const readingGeoLinks = new WeakMap<HTMLElement, GeoLinkTarget>();
 
 /** Keep original Maps links and expose saved facts. Legacy geo links prefer Place IDs. */
 export const readingPostProcessor: MarkdownPostProcessor = (el, ctx) => {
@@ -23,6 +27,7 @@ export const readingPostProcessor: MarkdownPostProcessor = (el, ctx) => {
       : o.url === href));
     if (hit) hit.used = true;
     if (geo) {
+      if (hit) readingGeoLinks.set(a, { path: ctx.sourcePath, line: hit.line, from: hit.from, lat: hit.lat, lng: hit.lng });
       a.setAttribute("href", placeUrl(hit ?? { lat: Number(geo[1]), lng: Number(geo[2]) }));
       a.addClass("wf-geo-link");
     }
@@ -43,7 +48,7 @@ export const readingPostProcessor: MarkdownPostProcessor = (el, ctx) => {
   });
 };
 
-interface Occurrence extends StopLink { used: boolean }
+interface Occurrence extends StopLink { used: boolean; line: number }
 let lastText = "";
 let lastLines: string[] = [];
 
@@ -52,5 +57,5 @@ function linksIn(text: string, lineStart: number, lineEnd: number): Occurrence[]
     lastText = text;
     lastLines = text.split("\n");
   }
-  return lastLines.slice(lineStart, lineEnd + 1).flatMap((line) => stopLinks(line).map((link) => ({ ...link, used: false })));
+  return lastLines.slice(lineStart, lineEnd + 1).flatMap((line, offset) => stopLinks(line).map((link) => ({ ...link, line: lineStart + offset, used: false })));
 }
