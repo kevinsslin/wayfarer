@@ -15,6 +15,7 @@ import { mapClearance } from "../core/map-layout";
 import { isValidTileUrl } from "../core/tiles";
 import { DEFAULT_SETTINGS } from "../settings";
 import { nextStop, previousStop, readProgress, resolveStop, stopRef } from "../core/journey";
+import { matchesGeoStop, type GeoLinkTarget } from "../core/geo-link-follow";
 
 
 export const VIEW_TYPE_WAYFARER = "wayfarer";
@@ -63,6 +64,27 @@ export class WayfarerView extends ItemView {
   }
 
   get isReady(): boolean { return this.map !== null; }
+  get sourcePath(): string | null { return this.file?.path ?? null; }
+
+  /** Preserve a compatible date filter; a new map or a hidden target opens All. */
+  focusSourceStop(target: GeoLinkTarget, reset: boolean): void {
+    const stop = this.itinerary?.stops.find((s) => matchesGeoStop(s, target));
+    if (!stop || this.file?.path !== target.path) return;
+    if (reset || (this.pinnedDay >= 0 && this.pinnedDay !== stop.dayIndex)) {
+      this.pinnedDay = -1;
+      this.pinnedHeading = null;
+    }
+    this.activeDay = this.pinnedDay;
+    this.focused = stop;
+    this.narrowOpen = false;
+    this.userMoved = false;
+    this.map?.closePopup();
+    this.draw();
+    this.flyToStop(stop);
+    this.openPopup(stop);
+    // Complete the handoff so Obsidian does not keep the old note link as its focus.
+    if (Platform.isMobile) this.mapEl.focus({ preventScroll: true });
+  }
 
   getViewType(): string {
     return VIEW_TYPE_WAYFARER;

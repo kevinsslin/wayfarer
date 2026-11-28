@@ -53,6 +53,11 @@ Run **Insert day headings for a trip** to get the headings, then paste links und
 
 ## Following the trip
 
+To select a mapped stop by clicking its geo link in Reading view or the editor,
+enable **Follow geo link on map** (off by default). Desktop and mobile reuse
+the open map; a new map starts on All. Native link menus and modified clicks
+remain external. See [geo-link navigation](docs/follow-geo-links.md).
+
 On a phone, the date selector and **map / list icons** sit at the available top of the pane. The selected icon is highlighted; both have accessible names and generous tap targets. Controls leave room for Obsidian’s mobile header and bottom navigation. The desktop keeps its day chips and floating timeline.
 
 Panels narrower than 560 CSS pixels use separate map and list surfaces on all platforms, including Windows and macOS sidebars. Narrow desktop panels retain editor cursor following, note navigation, and hover details when the input device supports hovering.
