@@ -12,8 +12,7 @@ import { t } from "../core/i18n";
 import type WayfarerPlugin from "../main";
 import { attachPhoto } from "../photos";
 import { mapClearance } from "../core/map-layout";
-import { isValidTileUrl } from "../core/tiles";
-import { DEFAULT_SETTINGS } from "../settings";
+import { Basemaps } from "./basemaps";
 import { nextStop, previousStop, readProgress, resolveStop, stopRef } from "../core/journey";
 
 
@@ -28,7 +27,7 @@ const MODES: Transport[] = ["walk", "bike", "car", "taxi", "bus", "train", "metr
  */
 export class WayfarerView extends ItemView {
   private map: L.Map | null = null;
-  private tiles: L.TileLayer | null = null;
+  private basemaps: Basemaps | null = null;
   private layer: L.LayerGroup = L.layerGroup();
   /** Arrowheads live apart from the rest: they sit a fixed number of pixels before the pin, so only they move with the zoom. */
   private arrows: L.LayerGroup = L.layerGroup();
@@ -36,7 +35,6 @@ export class WayfarerView extends ItemView {
   private markers = new Map<Stop, L.Marker>();
   /** Legs and dates per day, computed once per draw and reused by the map, the strip and the popups. */
   private plans = new Map<Day, { legs: Leg[]; date: Date | null }>();
-  private tilesKey = "";
   private legendEl!: HTMLElement;
   private mapEl!: HTMLElement;
   private stripEl!: HTMLElement;
@@ -198,6 +196,8 @@ export class WayfarerView extends ItemView {
   async onClose(): Promise<void> {
     this.contentEl.win.clearTimeout(this.hoverClose);
     this.cameraRevision++;
+    this.basemaps?.dispose();
+    this.basemaps = null;
     this.map?.remove();
     this.map = null;
   }
@@ -267,16 +267,10 @@ export class WayfarerView extends ItemView {
   /** Called on open and on every render, so a provider changed in settings shows without reopening the pane. */
   applyTiles(): void {
     if (!this.map) return;
-    // A template Leaflet cannot fill would throw on every tile; the default stands in until it is fixed.
-    const url = isValidTileUrl(this.plugin.settings.tileUrl) ? this.plugin.settings.tileUrl : DEFAULT_SETTINGS.tileUrl;
-    const key = `${url}|${this.plugin.settings.tileAttribution}`;
-    if (key === this.tilesKey) return;
-    this.tilesKey = key;
-    this.tiles?.remove();
-    this.tiles = L.tileLayer(url, {
-      attribution: this.plugin.settings.tileAttribution,
-      maxZoom: 19,
-    }).addTo(this.map);
+    this.basemaps ??= new Basemaps(this.map,
+      () => this.app.loadLocalStorage("wayfarer:basemap"),
+      (id) => this.app.saveLocalStorage("wayfarer:basemap", id));
+    this.basemaps.apply(this.plugin.settings.mapSources, this.plugin.settings.defaultMapSource);
   }
 
   /** Replaces the rendered itinerary. `cursorDay` picks the day to emphasise. */

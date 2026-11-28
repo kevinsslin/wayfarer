@@ -449,6 +449,37 @@ md.getMode = () => "source";
 app.vault = deferredVault;
 console.log("smoke: OK (stale drags, renamed stops, duplicate legs and link copies)");
 
+// Settings migration and tile-only saves leave the itinerary and Markdown alone.
+{
+  const oldLoad = plugin.loadData;
+  const oldSettings = plugin.settings;
+  const custom = "https://private.example.com/{z}/{x}/{y}.png?key=TEST-ONLY";
+  plugin.loadData = async () => ({ tileUrl: custom, tileAttribution: "Private tiles", autoOpen: false });
+  await plugin.loadSettings();
+  assert(plugin.settings.mapSources.length === 1 && plugin.settings.mapSources[0].url === custom, "legacy custom map migrates without losing its URL");
+  assert(plugin.settingTabs[0].getSettingDefinitions().some((s) => s.items?.some((i) => i.name === "Map sources")), "map-source editor is available in modern settings search");
+  const before = source, parsed = plugin.current.itinerary, revision = plugin.settingsRev;
+  const original = plugin.settings.mapSources[0];
+  const satellite = { ...original, id: "satellite", name: "Satellite", url: "https://imagery.example.com/{z}/{x}/{y}.jpg", maxZoom: 16 };
+  await plugin.saveMapSources([original, satellite], satellite.id);
+  assert(source === before && plugin.current.itinerary === parsed && plugin.settingsRev === revision, "background configuration does not write Markdown or redraw itinerary layers");
+  assert(plugin.savedData.defaultMapSource === "satellite" && plugin.savedData.tileUrl === satellite.url, "default is saved and mirrored to the legacy fields");
+  plugin.loadData = async () => plugin.savedData;
+  await plugin.loadSettings();
+  await plugin.loadSettings();
+  assert(plugin.settings.mapSources.length === 2 && plugin.settings.mapSources[0].url === custom, "repeated load preserves source order without duplicates");
+  const snapshot = JSON.stringify(plugin.settings);
+  const save = plugin.saveData;
+  plugin.saveData = async () => { throw new Error("disk unavailable"); };
+  let rejected = false;
+  try { await plugin.saveMapSources([satellite], satellite.id); } catch { rejected = true; }
+  assert(rejected && JSON.stringify(plugin.settings) === snapshot, "failed settings save leaves the active configuration unchanged");
+  plugin.saveData = save;
+  plugin.loadData = oldLoad;
+  plugin.settings = oldSettings;
+  console.log("smoke: OK (map sources, migration, tile-only saves and save failures)");
+}
+
 openNote("A.md", note);
 let resolveRequest;
 obsidianStub.requestUrl = () => new Promise((resolve) => { resolveRequest = resolve; });

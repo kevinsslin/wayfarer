@@ -17,6 +17,7 @@ import { PhotoCache, photoFor, type StopPhoto } from "./photos";
 import { getLocale, localeFor, setLocale, t } from "./core/i18n";
 import { bareLeg } from "./core/legs";
 import { googleLanguageFor } from "./core/google-language";
+import { mapSourcesFrom, pickMapSource, type MapSource } from "./core/map-sources";
 
 /**
  * Wayfarer: the note is the plan, the pane is the map.
@@ -160,6 +161,18 @@ export default class WayfarerPlugin extends Plugin {
     // Settings that no longer exist (photo cache, routing toggles) are dropped on the next save.
     const known = Object.fromEntries(Object.entries(data).filter(([k]) => k in DEFAULT_SETTINGS));
     this.settings = { ...DEFAULT_SETTINGS, ...known };
+    this.settings.mapSources = mapSourcesFrom(data.mapSources, data.tileUrl, data.tileAttribution);
+    this.settings.defaultMapSource = pickMapSource(this.settings.mapSources, this.settings.defaultMapSource, null).id;
+  }
+
+  /** Tile configuration does not redraw itinerary layers or close their popups. */
+  async saveMapSources(sources: MapSource[], defaultId: string): Promise<void> {
+    const mapSources = sources.map((s) => ({ ...s, subdomains: s.subdomains?.slice() }));
+    const chosen = pickMapSource(mapSources, defaultId, null);
+    const patch = { mapSources, defaultMapSource: chosen.id, tileUrl: chosen.url, tileAttribution: chosen.attribution };
+    await this.saveData({ ...this.settings, ...patch });
+    Object.assign(this.settings, patch);
+    for (const view of this.mapViews) view.applyTiles();
   }
   /** Bumped on every save, so a pane whose note did not change still redraws for a changed setting. */
   settingsRev = 0;

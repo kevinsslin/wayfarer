@@ -392,10 +392,14 @@
 :where(.wayfarer-view) .leaflet-control-layers {
 	box-shadow: 0 1px 5px rgb(0 0 0 / 40%);
 	background: #fff;
+	color: #333;
 	border-radius: 5px;
 }
 
 :where(.wayfarer-view) .leaflet-control-layers-toggle {
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	background-image: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
 	width: 36px;
 	height: 36px;
@@ -1594,6 +1598,8 @@
 }
 
 .wayfarer-view.is-narrow.is-list .leaflet-control-zoom,
+.wayfarer-view.is-narrow.is-list .leaflet-control-layers,
+.wayfarer-view.is-narrow.has-popup .leaflet-control-layers,
 .wayfarer-view.is-narrow.has-popup .leaflet-control-zoom { visibility: hidden; }
 
 .wayfarer-view.is-narrow .wf-journey {

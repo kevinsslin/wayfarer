@@ -8,6 +8,8 @@ describe("isValidTileUrl", () => {
     expect(isValidTileUrl("https://example.com/tms/{z}/{x}/{-y}.png")).toBe(true);
   });
   it("rejects what would stop the map from loading", () => {
+    expect(isValidTileUrl("https://[invalid]/{z}/{x}/{y}.png")).toBe(false);
+    expect(isValidTileUrl("https://:bad/{z}/{x}/{y}.png")).toBe(false);
     expect(isValidTileUrl("https://tiles.example.com/{z}/{x}/{y}.png?key={apikey}")).toBe(false);
     expect(isValidTileUrl("tile.openstreetmap.org/{z}/{x}/{y}.png")).toBe(false);
     expect(isValidTileUrl("https://tile.openstreetmap.org/{z} /{x}/{y}.png")).toBe(false);

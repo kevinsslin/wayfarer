@@ -27,6 +27,7 @@ Saved place details and routed legs travel with the note as hidden metadata. Syn
 - **Cards, not tooltips.** Click a pin for the photo, rating, that day's opening hours, your notes, address, and links to Google Maps, directions and the line in the note.
 - **Checks against what you wrote.** A time at the start of the line is the stop's time, local to that place. A routed leg that cannot fit between two written times turns red. A stop with Google hours says "closed that day" or "opens 10:00" for that weekday.
 - **Export to Google My Maps.** One KML per note, one layer per day.
+- **Choose the map background.** Configure multiple raster tile sources and switch between them on the map, keeping your stops and routes. OpenStreetMap remains the default. See [map sources](docs/map-sources.md) for satellite, hybrid and self-hosted examples.
 
 ![The timeline beside the map, and a stop card with photo, rating, notes, address and links](docs/screenshots/popup.jpg)
 
@@ -94,7 +95,7 @@ The skill instructions and this README are written in English. Language support 
 
 ## Google API key
 
-Optional. Without a key you get pins from the link's coordinates and straight-line distances. With a key you also get place details, photos and routed legs. The key is yours, stored in this vault's `.obsidian/plugins/wayfarer/data.json` and never written into a note. Place details, photos and routes use Google's Places and Routes endpoints; expanding a short link downloads its Google Maps page. The plugin does not execute scripts from that page. Map tiles come from OpenStreetMap unless you set another tile URL.
+Optional. Without a key you get pins from the link's coordinates and straight-line distances. With a key you also get place details, photos and routed legs. The key is yours, stored in this vault's `.obsidian/plugins/wayfarer/data.json` and never written into a note. Place details, photos and routes use Google's Places and Routes endpoints; expanding a short link downloads its Google Maps page. The plugin does not execute scripts from that page. Map backgrounds use the configured raster sources, independently of this Google key; OpenStreetMap remains the default.
 
 1. In [Google Cloud Console](https://console.cloud.google.com/) create a project and enable billing (Google requires a card even for the free tier; set a budget alert).
 2. Enable **Places API (New)** and **Routes API**.
